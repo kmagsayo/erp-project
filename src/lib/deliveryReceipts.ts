@@ -9,6 +9,41 @@ import type { PurchaseOrder } from '@/data/purchaseOrderTypes'
 import type { ItemSetup } from '@/data/setupTypes'
 
 const STORAGE_KEY = 'erp-delivery-receipts'
+const UNDO_DR_ITEM_SCAN_KEY = 'erp-undo-dr-item-scan-2'
+
+export function undoDeliveryItemScanTest() {
+  if (localStorage.getItem(UNDO_DR_ITEM_SCAN_KEY)) return
+  localStorage.setItem(UNDO_DR_ITEM_SCAN_KEY, '1')
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return
+    const rows = JSON.parse(raw) as Array<Partial<DeliveryReceipt>>
+    if (!Array.isArray(rows)) return
+
+    let changed = false
+    const next = rows.map((row) => {
+      if (row.id !== 'DR-000001' || !Array.isArray(row.items)) return row
+      const scanned = row.items.some((item) => (item.quantity ?? 0) > 0)
+      if (!scanned && row.status !== 'partially_delivered' && row.status !== 'delivered') return row
+      changed = true
+      return {
+        ...row,
+        status: row.status === 'received' || row.status === 'out_for_delivery' ? row.status : 'active',
+        totalAmount: 0,
+        items: row.items.map((item) => ({
+          ...item,
+          quantity: 0,
+          serialNumbers: [],
+          total: 0,
+        })),
+      }
+    })
+    if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+  } catch {
+    localStorage.removeItem(UNDO_DR_ITEM_SCAN_KEY)
+  }
+}
 
 export interface DeliveryReceiptFilters {
   status: DeliveryReceiptStatus | 'all'
@@ -51,6 +86,7 @@ function normalizeStatus(status: unknown): DeliveryReceiptStatus {
   if (
     status === 'out_for_delivery' ||
     status === 'delivered' ||
+    status === 'received' ||
     status === 'active' ||
     status === 'partially_delivered'
   ) {
@@ -82,6 +118,9 @@ export function normalizeDeliveryReceipt(
     deliveredBy: row.deliveredBy ?? '',
     deliveredByPosition: row.deliveredByPosition ?? '',
     receivedBy: row.receivedBy ?? '',
+    receivedAt: typeof row.receivedAt === 'string' ? row.receivedAt : '',
+    receivedRemarks: typeof row.receivedRemarks === 'string' ? row.receivedRemarks : '',
+    qrToken: isDeliveryReceiptQrToken(row.qrToken) ? row.qrToken : newDeliveryReceiptQrToken(),
     remarks: row.remarks ?? '',
     status: normalizeStatus(row.status),
   }
@@ -283,6 +322,7 @@ export function countDeliveryReceiptStatuses(receipts: DeliveryReceipt[]) {
     out_for_delivery: 0,
     partially_delivered: 0,
     delivered: 0,
+    received: 0,
   }
   receipts.forEach((receipt) => {
     counts[receipt.status] += 1
@@ -366,6 +406,7 @@ export function statusFromScannedQuantities(
   current: DeliveryReceiptStatus,
 ): DeliveryReceiptStatus {
   const { scanned, released } = deliveryProgress(items)
+  if (current === 'received') return 'received'
   if (released <= 0) return current
   if (scanned <= 0) return current === 'delivered' ? 'delivered' : current === 'out_for_delivery' ? 'out_for_delivery' : 'active'
   if (scanned >= released && items.every((item) => remainingDeliveryQty(item) === 0)) {
@@ -383,6 +424,7 @@ export function mergeReceiptWithOutslip(
   const templates = deliveryReceiptItemsFromOutslip(outslip, purchaseOrder, catalogItems)
   const looksUnscanned =
     receipt.status !== 'delivered' &&
+    receipt.status !== 'received' &&
     receipt.items.length > 0 &&
     receipt.items.every(
       (item) =>
@@ -529,6 +571,103 @@ export function applyBarcodeScan(
     message: `Serial ${serialNumber} recorded.`,
     receipt: nextReceipt,
     scannedItem: nextItem,
+  }
+}
+
+const QR_TOKEN_PATTERN = /^[a-f0-9]{32}$/
+
+export function isDeliveryReceiptQrToken(value: unknown): value is string {
+  return typeof value === 'string' && QR_TOKEN_PATTERN.test(value)
+}
+
+export function newDeliveryReceiptQrToken(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export const deliveryReceiptStatusLabel: Record<DeliveryReceiptStatus, string> = {
+  active: 'For Delivery',
+  out_for_delivery: 'Out for Delivery',
+  partially_delivered: 'Partially Delivered',
+  delivered: 'Delivered',
+  received: 'Received',
+}
+
+export function deliveryReceiptQrValue(token: string): string {
+  return `DRCV:${token}`
+}
+
+export function parseDeliveryReceiptQr(raw: string): string | null {
+  const compact = raw.trim().replace(/\s+/g, '').toUpperCase()
+  if (!compact) return null
+  const embedded = compact.match(/(?:^|[?&]C=)(DRCV:[A-F0-9]{32})/)
+  const code = embedded?.[1] ?? compact
+  const matched = code.match(/^DRCV:([A-F0-9]{32})$/)
+  return matched ? matched[1].toLowerCase() : null
+}
+
+export function formatReceivedAt(value: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('en-US', {
+    timeZone: 'Asia/Manila',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+const DELIVERY_ITEM_QR_PREFIX = 'DRITEM:'
+
+export function deliveryItemQrValue(receiptId: string, itemId: string, origin: string) {
+  const code = `${DELIVERY_ITEM_QR_PREFIX}${receiptId}:${itemId}`
+  return `${origin.replace(/\/$/, '')}/api/r?c=${encodeURIComponent(code)}`
+}
+
+export function parseDeliveryItemQr(code: string): { receiptId: string; itemId: string } | null {
+  const compact = code.replace(/\s+/g, '')
+  const fromUrl = compact.match(/[?&]c=([^&]+)/i)
+  const decoded = fromUrl ? decodeURIComponent(fromUrl[1]) : compact
+  if (!decoded.toUpperCase().startsWith(DELIVERY_ITEM_QR_PREFIX)) return null
+  const body = decoded.slice(DELIVERY_ITEM_QR_PREFIX.length)
+  const splitAt = body.indexOf(':')
+  if (splitAt <= 0 || splitAt >= body.length - 1) return null
+  return {
+    receiptId: body.slice(0, splitAt),
+    itemId: body.slice(splitAt + 1),
+  }
+}
+
+export function markDeliveryItemReceived(receipt: DeliveryReceipt, itemId: string) {
+  const item = receipt.items.find((row) => row.id === itemId)
+  if (!item) return { error: 'That QR does not match an item on this delivery receipt.' }
+  if (item.allowedQuantity > 0 && item.quantity >= item.allowedQuantity) {
+    return {
+      already: true as const,
+      receipt,
+      message: `${item.description} is already received.`,
+    }
+  }
+
+  const items = receipt.items.map((row) => {
+    if (row.id !== item.id) return row
+    const quantity = row.allowedQuantity > 0 ? row.allowedQuantity : row.quantity
+    return { ...row, quantity, total: quantity * row.unitPrice }
+  })
+  const next: DeliveryReceipt = {
+    ...receipt,
+    items,
+    totalAmount: items.reduce((sum, row) => sum + row.total, 0),
+    status: statusFromScannedQuantities(items, receipt.status),
+  }
+  return {
+    already: false as const,
+    receipt: next,
+    message: `${item.description} received.`,
   }
 }
 

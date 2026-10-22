@@ -14,7 +14,7 @@ class CustomerService
 
     public function getCustomers(Request $request)
     {
-        $query = Customer::query()->orderBy('id');
+        $query = Customer::query()->orderBy('code');
 
         $this->applySearch($query, $request->query('search'), [
             'name',

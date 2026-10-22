@@ -19,6 +19,61 @@ export const receivingListStatusLabel: Record<ReceivingStatus, string> = {
 export { formatDisplayDate, paginateItems }
 
 const STORAGE_KEY = 'erp-receivings'
+const UNDO_SCAN_TEST_KEY = 'erp-undo-receiving-confirm'
+
+export function undoReceivingScanTest() {
+  if (localStorage.getItem(UNDO_SCAN_TEST_KEY)) return
+  localStorage.setItem(UNDO_SCAN_TEST_KEY, '1')
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    const rows = raw ? (JSON.parse(raw) as Receiving[]) : []
+    if (!Array.isArray(rows)) return
+
+    const resetIds = new Set(
+      rows
+        .filter(
+          (row) =>
+            row.status === 'completed' ||
+            row.items.some((item) => item.receivedQuantity > 0),
+        )
+        .map((row) => row.id),
+    )
+    if (resetIds.size === 0) return
+
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(
+        rows.map((row) =>
+          resetIds.has(row.id)
+            ? {
+                ...row,
+                status: 'pending',
+                confirmedBy: '',
+                items: row.items.map((item) => ({ ...item, receivedQuantity: 0 })),
+              }
+            : row,
+        ),
+      ),
+    )
+
+    const ordersRaw = localStorage.getItem('erp-purchase-orders')
+    const orders = ordersRaw ? (JSON.parse(ordersRaw) as Array<{ receivingId?: string; status: string }>) : []
+    if (!Array.isArray(orders)) return
+    localStorage.setItem(
+      'erp-purchase-orders',
+      JSON.stringify(
+        orders.map((order) =>
+          order.receivingId && resetIds.has(order.receivingId)
+            ? { ...order, status: 'approved', receivingId: '' }
+            : order,
+        ),
+      ),
+    )
+  } catch {
+    localStorage.removeItem(UNDO_SCAN_TEST_KEY)
+  }
+}
 
 function parseNumberFromId(id: string): number {
   const numeric = Number(id.split('-').at(-1) ?? 0)
@@ -144,6 +199,36 @@ export const RECEIVING_CREATED_TOAST = 'Receiving created.'
 
 export function receivingCreatedToast(receivingId: string) {
   return `Receiving ${receivingId} created.`
+}
+
+const ITEM_QR_PREFIX = 'RCVITEM:'
+
+export function receivingItemQrValue(receivingId: string, itemId: string, origin: string) {
+  const code = `${ITEM_QR_PREFIX}${receivingId}:${itemId}`
+  return `${origin.replace(/\/$/, '')}/api/r?c=${code}`
+}
+
+export function parseReceivingItemQr(code: string): { receivingId: string; itemId: string } | null {
+  const compact = code.replace(/\s+/g, '')
+  const fromUrl = compact.match(/[?&]c=(RCVITEM:[A-Za-z0-9-]+:[A-Za-z0-9-]+)/i)
+  const trimmed = fromUrl?.[1] ?? compact
+  if (!trimmed.toUpperCase().startsWith(ITEM_QR_PREFIX)) return null
+  const body = trimmed.slice(ITEM_QR_PREFIX.length)
+  const splitAt = body.indexOf(':')
+  if (splitAt <= 0 || splitAt >= body.length - 1) return null
+  return {
+    receivingId: body.slice(0, splitAt),
+    itemId: body.slice(splitAt + 1),
+  }
+}
+
+export const RECEIVING_ITEM_SCAN_EVENT = 'erp-receiving-item-scanned'
+
+export interface ReceivingItemScanDetail {
+  receivingId: string
+  description: string
+  message: string
+  completed: boolean
 }
 
 export function formatReceivingReference(receivingId: string) {

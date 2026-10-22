@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import {
   Table,
   TableBody,
@@ -46,7 +45,9 @@ export function ReceivingDetailModal({
 
       if (event.key !== 'Tab' || !panelRef.current) return
 
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+      const trapRoot = panelRef.current
+
+      const focusable = trapRoot.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       )
       if (focusable.length === 0) return
@@ -89,12 +90,9 @@ export function ReceivingDetailModal({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
-          <div>
-            <h2 id={titleId} className="text-lg font-semibold text-text-primary sm:text-xl">
-              Receiving Details
-            </h2>
-            <TransactionBarcode value={receiving.id} />
-          </div>
+          <h2 id={titleId} className="text-lg font-semibold text-text-primary sm:text-xl">
+            Receiving Details
+          </h2>
           <button
             ref={closeButtonRef}
             type="button"
@@ -120,22 +118,15 @@ export function ReceivingDetailModal({
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Item</TableHead>
                   <TableHead className="text-center">Ordered</TableHead>
-                  <TableHead className="text-center">Received</TableHead>
-                  <TableHead className="text-center">Remaining</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {receiving.items.map((item) => {
-                  const remaining = Math.max(0, item.orderedQuantity - item.receivedQuantity)
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.description}</TableCell>
-                      <TableCell className="text-center">{item.orderedQuantity}</TableCell>
-                      <TableCell className="text-center">{item.receivedQuantity}</TableCell>
-                      <TableCell className="text-center">{remaining}</TableCell>
-                    </TableRow>
-                  )
-                })}
+                {receiving.items.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.description}</TableCell>
+                    <TableCell className="text-center">{item.orderedQuantity}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </section>

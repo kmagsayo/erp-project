@@ -11,7 +11,7 @@ import {
   type ScannedTransaction,
 } from '@/lib/transactionBarcode'
 import type { ItemSetup } from '@/data/setupTypes'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export function BarcodeLookup() {
   const { purchaseOrders, receivings, outslips, gatePasses, deliveryReceipts } = useErp()
@@ -30,12 +30,15 @@ export function BarcodeLookup() {
     setLoading(true)
   }
 
+  const openScanRef = useRef(openScan)
+  openScanRef.current = openScan
+
   usePhysicalBarcodeScan(openScan)
 
   useEffect(() => {
     function handleLookup(event: Event) {
       const code = (event as CustomEvent<string>).detail
-      if (typeof code === 'string' && code.trim()) openScan(code.trim())
+      if (typeof code === 'string' && code.trim()) openScanRef.current(code.trim())
     }
 
     window.addEventListener(BARCODE_SCAN_EVENT, handleLookup)

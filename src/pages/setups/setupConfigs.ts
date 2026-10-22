@@ -344,7 +344,6 @@ export const projectConfig: SetupResourceConfig<ProjectSetup> = {
     { key: 'status', label: 'Status' },
   ],
   fields: [
-    { name: 'project_code', label: 'Project Code', type: 'text', required: true },
     { name: 'project_name', label: 'Project Name', type: 'text', required: true },
     {
       name: 'customer_id',
@@ -359,9 +358,8 @@ export const projectConfig: SetupResourceConfig<ProjectSetup> = {
     { name: 'remarks', label: 'Remarks', type: 'textarea' },
     statusField,
   ],
-  getRecordLabel: (row) => row.project_code,
+  getRecordLabel: (row) => row.project_name,
   getEmptyForm: () => ({
-    project_code: '',
     project_name: '',
     customer_id: '',
     location: '',
@@ -371,7 +369,6 @@ export const projectConfig: SetupResourceConfig<ProjectSetup> = {
     status: 'active',
   }),
   mapRowToForm: (row) => ({
-    project_code: row.project_code,
     project_name: row.project_name,
     customer_id: String(row.customer_id),
     location: row.location ?? '',
@@ -380,6 +377,11 @@ export const projectConfig: SetupResourceConfig<ProjectSetup> = {
     remarks: row.remarks ?? '',
     status: row.status,
   }),
+  sanitizePayload: (payload) => {
+    const next = { ...payload }
+    delete next.project_code
+    return next
+  },
 }
 
 export const itemConfig: SetupResourceConfig<ItemSetup> = {

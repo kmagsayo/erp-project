@@ -14,6 +14,9 @@ export interface Billing {
   billingNo: string
   customerId: string
   customerName: string
+  projectId: string
+  projectName: string
+  invoiceNo: string
   deliveryReceiptId: string
   deliveryReceiptNo: string
   date: string
@@ -22,6 +25,10 @@ export interface Billing {
   items: BillingLineItem[]
   subtotal: number
   tax: number
+  withholdingTax: number
+  retentionAmount: number
+  managementAmount: number
+  mobilizationAmount: number
   total: number
   amountPaid: number
   balance: number

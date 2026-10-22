@@ -16,15 +16,11 @@ class CompanyController extends Controller
 
     public function __construct(private readonly CompanyService $service) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $company = $this->service->getCompany();
+        $companies = $this->service->getCompanies($request);
 
-        if (! $company) {
-            return ApiResponse::success(['company' => null], 'No company record found yet.');
-        }
-
-        return ApiResponse::success(['company' => $company], 'Company retrieved successfully.');
+        return ApiResponse::paginated($companies, 'companies', 'Companies retrieved successfully.');
     }
 
     public function store(CompanyRequest $request)
@@ -50,6 +46,15 @@ class CompanyController extends Controller
         $company = $this->service->updateCompany($company, $request->validated());
 
         return ApiResponse::success(['company' => $company], 'Company updated successfully.');
+    }
+
+    public function destroy(Company $company)
+    {
+        return $this->runSetupAction(function () use ($company) {
+            $this->service->deleteCompany($company);
+
+            return ApiResponse::success(null, 'Company deleted successfully.');
+        });
     }
 
     public function uploadLogo(UploadCompanyLogoRequest $request, Company $company)

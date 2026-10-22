@@ -11,6 +11,7 @@ export type DeliveryReceiptStatus =
   | 'out_for_delivery'
   | 'partially_delivered'
   | 'delivered'
+  | 'received'
 export type OutslipStatus = 'draft' | 'pending' | 'approved' | 'released' | 'cancelled'
 export type ReceivingStatus = 'pending' | 'completed'
 export type GatePassStatus = 'approved' | 'cancelled'
@@ -158,6 +159,9 @@ export interface DeliveryReceipt {
   deliveredBy: string
   deliveredByPosition: string
   receivedBy: string
+  receivedAt: string
+  receivedRemarks: string
+  qrToken: string
   remarks: string
   status: DeliveryReceiptStatus
 }

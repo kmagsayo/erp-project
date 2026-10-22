@@ -24,19 +24,24 @@ class ImportRtsSystemSeeder extends Seeder
     public function run(): void
     {
         if (! Schema::hasTable('setup_company')) {
-            $this->command?->warn('setup_* tables were not found. Import rts_system.sql into MySQL first.');
+            $this->command?->line('No legacy setup tables were found. The local database was left unchanged.');
 
             return;
         }
 
         $this->importCompanies();
-        $this->importNamedSetups('setup_branch', fn (object $row) => [
-            'name' => $row->name,
-            'code' => $this->uniqueCode('BR', $row->id, $row->name),
-            'address' => null,
-            'contact_information' => null,
-            'status' => $this->status($row->status),
-        ], new Branch);
+        $this->importNamedSetups('setup_branch', function (object $row) {
+            $company = Company::query()->find($row->company_id);
+
+            return [
+                'company_id' => $company?->id,
+                'name' => $row->name,
+                'code' => $this->uniqueCode('BR', $row->id, $row->name),
+                'address' => $company ? trim((string) $company->address) : null,
+                'contact_information' => $company?->contact_number,
+                'status' => $this->status($row->status),
+            ];
+        }, new Branch);
         $this->importNamedSetups('setup_brand', fn (object $row) => [
             'name' => $row->name,
             'code' => $this->uniqueCode('BRD', $row->id, $row->name),
@@ -79,6 +84,7 @@ class ImportRtsSystemSeeder extends Seeder
                     'address' => $row->address,
                     'contact_number' => $row->contact_no,
                     'email' => null,
+                    'logo_path' => null,
                     'registration_information' => $row->tin_no,
                     'created_at' => $row->date_created,
                     'updated_at' => $row->date_created,
@@ -233,7 +239,7 @@ class ImportRtsSystemSeeder extends Seeder
                 [
                     'name' => $row->name,
                     'email' => $email,
-                    'password' => $username === 'admin' ? 'admin123' : (string) $row->password,
+                    'password' => (string) $row->password,
                     'position_id' => $row->position_id ?: null,
                     'type' => strtolower((string) $row->type) === 'admin' ? 'admin' : 'user',
                     'status' => $this->status($row->status),

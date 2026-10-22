@@ -1,77 +1,64 @@
+import type { SoaLine } from '@/data/soaTypes'
 import type { SoaViewModel } from '@/lib/soa'
-import {
-  formatSoaDisplayDate,
-  formatSoaMoney,
-  formatSoaPeriod,
-} from '@/lib/soa'
+import { formatSoaDisplayDate, formatSoaPrintMoney } from '@/lib/soa'
+import { Printer } from 'lucide-react'
 
 interface SoaLedgerProps {
   soa: SoaViewModel
+  lines: SoaLine[]
+  onPrint: (line: SoaLine) => void
 }
 
-export function SoaLedger({ soa }: SoaLedgerProps) {
+export function SoaLedger({ soa, lines, onPrint }: SoaLedgerProps) {
   return (
-    <>
-      <div className="mb-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm">
-        <p className="text-text-secondary">
-          Period: {formatSoaPeriod(soa.dateFrom, soa.dateTo)}
-        </p>
-        <p className="mt-1 font-semibold text-text-primary">{soa.customerName}</p>
-      </div>
-
-      <div className="mb-4 overflow-x-auto rounded-lg border border-border bg-surface">
-        <table className="w-full text-sm">
-          <thead className="bg-table-header text-left text-xs uppercase tracking-wide text-text-secondary">
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="border-y border-border text-left text-xs uppercase tracking-wide text-text-secondary">
+          <tr>
+            <th className="px-3 py-3">Date</th>
+            <th className="px-3 py-3">Transaction Date</th>
+            <th className="px-3 py-3">Reference No.</th>
+            <th className="px-3 py-3 text-right">Debit</th>
+            <th className="px-3 py-3 text-right">Credit</th>
+            <th className="px-3 py-3 text-right">Balance</th>
+            <th className="px-3 py-3">
+              <span className="sr-only">Print</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {lines.length === 0 ? (
             <tr>
-              <th className="px-4 py-3">Date</th>
-              <th className="px-4 py-3">Reference</th>
-              <th className="px-4 py-3">Description</th>
-              <th className="px-4 py-3 text-right">Balance</th>
+              <td colSpan={7} className="px-3 py-10 text-center text-text-secondary">
+                {soa.customerName && soa.customerName !== '—'
+                  ? 'No transactions for this ledger.'
+                  : 'Select a client to view the ledger.'}
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {soa.lines.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-text-secondary">
-                  No transactions for this customer and period.
+          ) : (
+            lines.map((line) => (
+              <tr key={line.id} className="border-b border-border">
+                <td className="px-3 py-3">{formatSoaDisplayDate(line.date)}</td>
+                <td className="px-3 py-3">{formatSoaDisplayDate(line.transactionDate)}</td>
+                <td className="px-3 py-3">{line.reference}</td>
+                <td className="px-3 py-3 text-right">{formatSoaPrintMoney(line.debit)}</td>
+                <td className="px-3 py-3 text-right">{formatSoaPrintMoney(line.credit)}</td>
+                <td className="px-3 py-3 text-right">{formatSoaPrintMoney(line.balance)}</td>
+                <td className="px-3 py-3 text-right align-middle">
+                  <button
+                    type="button"
+                    aria-label={`Print ${line.reference}`}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-maroon-light hover:text-maroon"
+                    onClick={() => onPrint(line)}
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
                 </td>
               </tr>
-            ) : (
-              soa.lines.map((line) => (
-                <tr key={line.id} className="border-t border-border">
-                  <td className="px-4 py-3">{formatSoaDisplayDate(line.date)}</td>
-                  <td className="px-4 py-3">{line.reference}</td>
-                  <td className="px-4 py-3">{line.description}</td>
-                  <td className="px-4 py-3 text-right font-medium">
-                    {formatSoaMoney(line.balance)}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
-          <p className="text-sm text-text-secondary">Total Charges</p>
-          <p className="mt-1 text-2xl font-semibold text-text-primary">
-            {formatSoaMoney(soa.totalCharges)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
-          <p className="text-sm text-text-secondary">Total Payments</p>
-          <p className="mt-1 text-2xl font-semibold text-text-primary">
-            {formatSoaMoney(soa.totalPayments)}
-          </p>
-        </div>
-        <div className="rounded-lg border border-border bg-surface px-4 py-4">
-          <p className="text-sm text-text-secondary">Outstanding Balance</p>
-          <p className="mt-1 text-2xl font-semibold text-maroon">
-            {formatSoaMoney(soa.outstandingBalance)}
-          </p>
-        </div>
-      </div>
-    </>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   )
 }

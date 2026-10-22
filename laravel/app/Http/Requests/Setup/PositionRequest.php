@@ -13,7 +13,7 @@ class PositionRequest extends SetupFormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'code' => [
-                'required',
+                'nullable',
                 'string',
                 'max:50',
                 Rule::unique('positions', 'code')->ignore($positionId),

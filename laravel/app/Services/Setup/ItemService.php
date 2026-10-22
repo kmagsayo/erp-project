@@ -22,7 +22,7 @@ class ItemService
     {
         $query = Item::query()
             ->with(['category', 'brand', 'model', 'unitOfMeasure'])
-            ->orderBy('id');
+            ->orderBy('item_code');
 
         $this->applySearch($query, $request->query('search'), ['item_code', 'barcode', 'item_name', 'description']);
         $this->applyStatusFilter($query, $request->query('status'));

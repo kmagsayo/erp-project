@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Setting;
+use App\Models\User;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -10,6 +11,9 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call(ImportRtsSystemSeeder::class);
+        $this->call(FillBranchCompanySeeder::class);
+        $this->call(CatalogItemsFromModelsSeeder::class);
+        $this->call(RenumberSetupCodesSeeder::class);
 
         Setting::query()->firstOrCreate([], [
             'company_name' => 'RESPONSIVCODE TECHNOLOGY SOLUTIONS',
@@ -21,5 +25,16 @@ class DatabaseSeeder extends Seeder
             'date_format' => 'F j, Y',
             'paper_size' => 'A4',
         ]);
+
+        if (! User::query()->exists()) {
+            User::query()->create([
+                'name' => 'WEB ADMINISTRATOR',
+                'username' => 'admin',
+                'email' => 'admin@responsivcode.com',
+                'password' => 'admin123',
+                'type' => 'admin',
+                'status' => 'active',
+            ]);
+        }
     }
 }

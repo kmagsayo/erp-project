@@ -13,7 +13,7 @@ class UnitOfMeasureRequest extends SetupFormRequest
         return [
             'name' => ['required', 'string', 'max:100'],
             'code' => [
-                'required',
+                'nullable',
                 'string',
                 'max:50',
                 Rule::unique('unit_of_measures', 'code')->ignore($unitId),

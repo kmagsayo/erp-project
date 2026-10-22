@@ -1,15 +1,13 @@
-import { CreateGatePassFromOutslipDialog } from '@/components/gate-passes/CreateGatePassFromOutslipDialog'
-import { CancelGatePassDialog } from '@/components/gate-passes/CancelGatePassDialog'
 import { GatePassDetailModal } from '@/components/gate-passes/GatePassDetailModal'
 import { GatePassDocument } from '@/components/gate-passes/GatePassDocument'
 import { GatePassFiltersBar } from '@/components/gate-passes/GatePassFiltersBar'
 import { GatePassTable } from '@/components/gate-passes/GatePassTable'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { AddButton } from '@/components/ui/add-button'
 import { Pagination } from '@/components/ui/pagination'
 import { Toast } from '@/components/ui/toast'
 import { useErp } from '@/data/erpStore'
 import type { GatePass } from '@/data/erpTypes'
+import { loadCatalogItems } from '@/hooks/useCatalogItems'
 import {
   countGatePassStatuses,
   filterGatePasses,
@@ -19,6 +17,7 @@ import {
   type GatePassFilters,
 } from '@/lib/gatePasses'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 const PAGE_SIZE = 10
@@ -31,7 +30,7 @@ const defaultFilters: GatePassFilters = {
 }
 
 export function GatePassesPage() {
-  const { gatePasses, outslips, deliveryReceipts, createGatePassFromOutslip, updateGatePass, createDeliveryReceiptFromOutslip } = useErp()
+  const { gatePasses, deliveryReceipts, createGatePassFromOutslip, updateGatePass, createDeliveryReceiptFromOutslip } = useErp()
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const location = useLocation()
@@ -42,11 +41,7 @@ export function GatePassesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(params.get('id'))
   const [toast, setToast] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [createOutslipId, setCreateOutslipId] = useState('')
-  const [createMessage, setCreateMessage] = useState<string | null>(null)
   const [printTarget, setPrintTarget] = useState<GatePass | null>(null)
-  const [cancelTarget, setCancelTarget] = useState<GatePass | null>(null)
 
   const statusCounts = useMemo(() => countGatePassStatuses(gatePasses), [gatePasses])
 
@@ -114,31 +109,14 @@ export function GatePassesPage() {
 
   const selected = gatePasses.find((row) => row.id === selectedId) ?? null
 
-  function handlePrint(gatePass: GatePass) {
-    setPrintTarget(gatePass)
-    requestAnimationFrame(() => handleGatePassPrint())
-  }
-
-  function openCreate() {
-    setCreateOutslipId('')
-    setCreateMessage(null)
-    setCreateOpen(true)
-  }
-
-  function handleCreateFromOutslip() {
-    if (!createOutslipId) {
-      setCreateMessage('Select a released Outslip first.')
-      return
+  async function handlePrint(gatePass: GatePass) {
+    try {
+      await loadCatalogItems()
+    } catch {
+      // The sheet still prints. Brand and model stay blank when the catalog cannot be loaded.
     }
-    const result = createGatePassFromOutslip(createOutslipId)
-    if (result.error || !result.gatePass) {
-      setCreateMessage(result.error ?? 'Could not create gate pass.')
-      return
-    }
-    setCreateOpen(false)
-    setCreateMessage(null)
-    setSelectedId(result.gatePass.id)
-    setToast(`Gate Pass ${result.gatePass.id} created.`)
+    flushSync(() => setPrintTarget(gatePass))
+    handleGatePassPrint()
   }
 
   function updateSelectedField<K extends keyof GatePass>(key: K, value: GatePass[K]) {
@@ -147,38 +125,9 @@ export function GatePassesPage() {
     updateGatePass({ ...selected, [key]: value })
   }
 
-  function handleCancelGatePass(gatePass: GatePass) {
-    if (gatePass.status !== 'approved') return
-    if (deliveryReceipts.some((row) => row.outslipId === gatePass.outslipId)) {
-      setMessage('Cannot cancel a Gate Pass after a Delivery Receipt has been created.')
-      return
-    }
-    setMessage(null)
-    setCancelTarget(gatePass)
-  }
-
-  function confirmCancelGatePass() {
-    if (!cancelTarget) return
-    const current = gatePasses.find((row) => row.id === cancelTarget.id) ?? cancelTarget
-    const result = updateGatePass({ ...current, status: 'cancelled' })
-    if (result.error) {
-      setMessage(result.error)
-      setCancelTarget(null)
-      return
-    }
-    setMessage(null)
-    setToast(`Gate Pass ${current.id} cancelled.`)
-    setCancelTarget(null)
-  }
-
   const existingDeliveryReceiptId = selected
     ? (deliveryReceipts.find((row) => row.outslipId === selected.outslipId)?.id ?? null)
     : null
-
-  const blockedOutslipIds = useMemo(
-    () => new Set(deliveryReceipts.map((row) => row.outslipId)),
-    [deliveryReceipts],
-  )
 
   function handleCreateDeliveryReceipt() {
     if (!selected) return
@@ -210,7 +159,6 @@ export function GatePassesPage() {
           breadcrumb="Transaction / Gate Pass"
           title="Gate Pass"
           description="Authorize items to leave the premises from a released Outslip, then create the Delivery Receipt."
-          action={<AddButton label="New Gate Pass" onClick={openCreate} />}
         />
 
         <GatePassFiltersBar filters={filters} counts={statusCounts} onChange={setFilters} />
@@ -218,13 +166,11 @@ export function GatePassesPage() {
         <GatePassTable
           gatePasses={pagination.items}
           selectedId={selectedId}
-          blockedOutslipIds={blockedOutslipIds}
           onSelect={(gatePass) => {
             setSelectedId(gatePass.id)
             setMessage(null)
           }}
           onPrint={handlePrint}
-          onCancel={handleCancelGatePass}
         />
 
         {pagination.totalPages > 1 ? (
@@ -239,44 +185,17 @@ export function GatePassesPage() {
 
         {message ? <p className="mt-3 text-sm text-text-secondary">{message}</p> : null}
 
-        <CreateGatePassFromOutslipDialog
-          open={createOpen}
-          outslips={outslips}
-          usedOutslipIds={gatePasses
-            .filter((row) => row.status === 'approved')
-            .map((row) => row.outslipId)}
-          selectedOutslipId={createOutslipId}
-          message={createMessage}
-          onSelectedOutslipIdChange={(outslipId) => {
-            setCreateOutslipId(outslipId)
-            setCreateMessage(null)
-          }}
-          onConfirm={handleCreateFromOutslip}
-          onClose={() => {
-            setCreateOpen(false)
-            setCreateMessage(null)
-          }}
-        />
-
         {selected ? (
           <GatePassDetailModal
             gatePass={selected}
             message={message}
             existingDeliveryReceiptId={existingDeliveryReceiptId}
             onClose={() => setSelectedId(null)}
-            onPrint={() => handlePrint(selected)}
-            onCancel={() => handleCancelGatePass(selected)}
             onCreateDeliveryReceipt={handleCreateDeliveryReceipt}
             onViewDeliveryReceipt={(receiptId) => navigate(`/delivery-receipts?id=${receiptId}`)}
             onUpdateField={updateSelectedField}
           />
         ) : null}
-
-        <CancelGatePassDialog
-          gatePass={cancelTarget}
-          onClose={() => setCancelTarget(null)}
-          onConfirm={confirmCancelGatePass}
-        />
       </div>
 
       <div className="gatepass-print-root">

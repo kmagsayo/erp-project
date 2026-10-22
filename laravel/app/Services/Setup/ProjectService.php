@@ -4,11 +4,13 @@ namespace App\Services\Setup;
 
 use App\Models\Customer;
 use App\Models\Project;
+use App\Services\Setup\Concerns\AllocatesSetupCodes;
 use App\Services\Setup\Concerns\PaginatesSetupQueries;
 use Illuminate\Http\Request;
 
 class ProjectService
 {
+    use AllocatesSetupCodes;
     use PaginatesSetupQueries;
 
     public function getProjects(Request $request)
@@ -38,8 +40,15 @@ class ProjectService
     public function createProject(array $data): Project
     {
         Customer::query()->findOrFail($data['customer_id']);
+        unset($data['project_code']);
 
-        $project = Project::query()->create($data);
+        $project = Project::query()->create([
+            ...$data,
+            'project_code' => 'PRJ-TMP-'.uniqid(),
+        ]);
+        $project->update([
+            'project_code' => $this->nextSequentialCode('projects', 'project_code', 'PRJ-', 3, $project->id),
+        ]);
 
         return $project->load('customer');
     }
@@ -47,6 +56,7 @@ class ProjectService
     public function updateProject(Project $project, array $data): Project
     {
         Customer::query()->findOrFail($data['customer_id']);
+        unset($data['project_code']);
 
         $project->update($data);
 

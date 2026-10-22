@@ -2,9 +2,12 @@ export type SoaStatus = 'open' | 'partial' | 'settled'
 
 export interface SoaLine {
   id: string
+  billingId: string
   date: string
+  transactionDate: string
   reference: string
   description: string
+  kind: 'billing' | 'payment'
   debit: number
   credit: number
   balance: number

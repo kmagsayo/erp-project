@@ -1,5 +1,4 @@
 import logo from '@/assets/logo.png'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { companyInfo } from '@/data/accomplishmentReports'
 import type { SoaPrintDocumentModel } from '@/lib/soa'
 import { formatSoaPrintDate, formatSoaPrintMoney } from '@/lib/soa'
@@ -44,7 +43,6 @@ export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
             <span>Statement No.:</span>
             <span className="soa-meta-value">{document.statementNo}</span>
           </div>
-          <TransactionBarcode value={document.statementNo} />
         </div>
       </div>
 

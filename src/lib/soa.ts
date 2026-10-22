@@ -43,16 +43,6 @@ export const soaStatusLabel: Record<SoaStatus, string> = {
   settled: 'Settled',
 }
 
-function addDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return isoDate
-  date.setDate(date.getDate() + days)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 function namesMatch(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase()
 }
@@ -125,11 +115,15 @@ export function buildSoaFromBillings(
   sorted.forEach((billing) => {
     running += billing.total
     totalCharges += billing.total
+    const reference = billing.invoiceNo || billing.billingNo
     lines.push({
       id: `${billing.id}-debit`,
+      billingId: billing.id,
       date: billing.date,
-      reference: billing.billingNo,
-      description: `Billing — ${billing.deliveryReceiptNo || '—'}`,
+      transactionDate: billing.date,
+      reference,
+      description: `Billing — ${reference}`,
+      kind: 'billing',
       debit: billing.total,
       credit: 0,
       balance: running,
@@ -138,12 +132,14 @@ export function buildSoaFromBillings(
     if (billing.amountPaid > 0) {
       running -= billing.amountPaid
       totalPayments += billing.amountPaid
-      const payDate = addDays(billing.date, 1)
       lines.push({
         id: `${billing.id}-credit`,
-        date: payDate,
-        reference: `PAY-${billing.billingNo.replace(/^BS-/, '')}`,
+        billingId: billing.id,
+        date: billing.date,
+        transactionDate: billing.date,
+        reference,
         description: paymentDescription(billing),
+        kind: 'payment',
         debit: 0,
         credit: billing.amountPaid,
         balance: running,

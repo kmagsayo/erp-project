@@ -31,6 +31,8 @@ class BranchController extends Controller
 
     public function show(Branch $branch)
     {
+        $branch->load('company');
+
         return ApiResponse::success(['branch' => $branch], 'Branch retrieved successfully.');
     }
 

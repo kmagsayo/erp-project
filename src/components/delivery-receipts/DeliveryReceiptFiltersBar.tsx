@@ -9,6 +9,7 @@ const statuses: Array<{ id: DeliveryReceiptStatus | 'all'; label: string }> = [
   { id: 'out_for_delivery', label: 'Out for Delivery' },
   { id: 'partially_delivered', label: 'Partially Delivered' },
   { id: 'delivered', label: 'Delivered' },
+  { id: 'received', label: 'Received' },
 ]
 
 interface DeliveryReceiptFiltersBarProps {

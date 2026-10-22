@@ -26,16 +26,22 @@ import {
   loadOutslips,
   recalculateOutslipTotals,
   saveOutslips,
+  undoCreatedOutslip,
   validateOutslipQuantities,
 } from '@/lib/outslips'
 import {
   buildReceivingFromPo,
   loadReceivings,
+  parseReceivingItemQr,
   saveReceivings,
+  undoReceivingScanTest,
+  type ReceivingItemScanDetail,
 } from '@/lib/receivings'
 import {
   loadDeliveryReceipts,
+  newDeliveryReceiptQrToken,
   saveDeliveryReceipts,
+  undoDeliveryItemScanTest,
   withOutslipAmounts,
 } from '@/lib/deliveryReceipts'
 import {
@@ -72,6 +78,7 @@ interface ErpStore {
     receivingId: string,
     userName?: string,
   ) => { receiving?: Receiving; error?: string }
+  receiveScannedItem: (code: string) => ReceivingItemScanDetail | null
   saveOutslipDraft: (outslip: Outslip) => { outslip?: Outslip; error?: string }
   updateOutslipStatus: (
     outslipId: string,
@@ -95,6 +102,10 @@ interface ErpStore {
     receiptId: string,
     status: DeliveryReceiptStatus,
   ) => { error?: string }
+  confirmDeliveryReceiptReceived: (
+    receiptId: string,
+    confirmation: { receivedBy: string; receivedAt: string; remarks: string },
+  ) => { receipt?: DeliveryReceipt; error?: string; already?: boolean }
   createGatePassFromOutslip: (outslipId: string) => { gatePass?: GatePass; error?: string }
   updateGatePass: (gatePass: GatePass) => { gatePass?: GatePass; error?: string }
 }
@@ -110,15 +121,20 @@ export function nextId(prefix: string, ids: string[]): string {
 }
 
 export function ErpProvider({ children }: { children: ReactNode }) {
-  const [outslips, setOutslips] = useState<Outslip[]>(() => loadOutslips([]))
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() =>
-    loadPurchaseOrders(initialPurchaseOrders),
-  )
+  const [outslips, setOutslips] = useState<Outslip[]>(() => {
+    undoCreatedOutslip()
+    return loadOutslips([])
+  })
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(() => {
+    undoReceivingScanTest()
+    return loadPurchaseOrders(initialPurchaseOrders)
+  })
   const [receivings, setReceivings] = useState<Receiving[]>(() => loadReceivings([]))
   const [movements, setMovements] = useState(initialMovements)
-  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>(() =>
-    loadDeliveryReceipts([]),
-  )
+  const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>(() => {
+    undoDeliveryItemScanTest()
+    return loadDeliveryReceipts([])
+  })
   const [gatePasses, setGatePasses] = useState<GatePass[]>(() => loadGatePasses([]))
 
   useEffect(() => {
@@ -368,6 +384,23 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       setMovements((current) => [...current, ...newRows])
     }
 
+    function persistCompletedReceiving(next: Receiving, userName: string) {
+      const nextReceivings = receivings.map((row) => (row.id === next.id ? next : row))
+      setReceivings(nextReceivings)
+      saveReceivings(nextReceivings)
+      recordReceivingMovements(next, userName)
+
+      const orders = loadPurchaseOrders(initialPurchaseOrders)
+      savePurchaseOrders(
+        orders.map((row) =>
+          row.id === next.poRecordId
+            ? { ...row, receivingId: next.id, status: 'completed' }
+            : row,
+        ),
+      )
+      setPurchaseOrders(loadPurchaseOrders(initialPurchaseOrders))
+    }
+
     function confirmReceiving(receivingId: string, userName = 'Admin') {
       const receiving = receivings.find((row) => row.id === receivingId)
       if (!receiving) return { error: 'Receiving not found.' }
@@ -384,24 +417,72 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           receivedQuantity: item.orderedQuantity,
         })),
       }
-      const nextReceivings = receivings.map((row) =>
-        row.id === receivingId ? next : row,
-      )
-      setReceivings(nextReceivings)
-      saveReceivings(nextReceivings)
-      recordReceivingMovements(next, userName)
-
-      const orders = loadPurchaseOrders(initialPurchaseOrders)
-      savePurchaseOrders(
-        orders.map((row) =>
-          row.id === receiving.poRecordId
-            ? { ...row, receivingId: receiving.id, status: 'completed' }
-            : row,
-        ),
-      )
-      setPurchaseOrders(loadPurchaseOrders(initialPurchaseOrders))
-
+      persistCompletedReceiving(next, userName)
       return { receiving: next }
+    }
+
+    function receiveScannedItem(code: string): ReceivingItemScanDetail | null {
+      const parsed = parseReceivingItemQr(code)
+      if (!parsed) return null
+
+      const receiving = receivings.find((row) => row.id === parsed.receivingId)
+      if (!receiving) {
+        return {
+          receivingId: parsed.receivingId,
+          description: '',
+          message: 'Receiving not found.',
+          completed: false,
+        }
+      }
+
+      const item = receiving.items.find((row) => row.id === parsed.itemId)
+      if (!item) {
+        return {
+          receivingId: receiving.id,
+          description: '',
+          message: 'That QR does not match an item on this receiving.',
+          completed: false,
+        }
+      }
+
+      if (receiving.status === 'completed' || item.receivedQuantity >= item.orderedQuantity) {
+        return {
+          receivingId: receiving.id,
+          description: item.description,
+          message: `${item.description} is already received.`,
+          completed: receiving.status === 'completed',
+        }
+      }
+
+      const items = receiving.items.map((row) =>
+        row.id === item.id ? { ...row, receivedQuantity: row.orderedQuantity } : row,
+      )
+      const allReceived = items.every(
+        (row) => row.orderedQuantity <= 0 || row.receivedQuantity >= row.orderedQuantity,
+      )
+      const next: Receiving = allReceived
+        ? {
+            ...receiving,
+            items,
+            status: 'completed',
+            confirmedBy: receiving.confirmedBy || 'Admin',
+          }
+        : { ...receiving, items }
+
+      if (allReceived) {
+        persistCompletedReceiving(next, next.confirmedBy || 'Admin')
+      } else {
+        const nextReceivings = receivings.map((row) => (row.id === receiving.id ? next : row))
+        setReceivings(nextReceivings)
+        saveReceivings(nextReceivings)
+      }
+
+      return {
+        receivingId: receiving.id,
+        description: item.description,
+        message: `${item.description} received.`,
+        completed: allReceived,
+      }
     }
 
     function saveOutslipDraft(outslip: Outslip) {
@@ -537,6 +618,9 @@ export function ErpProvider({ children }: { children: ReactNode }) {
           deliveredBy: outslip.releasedBy || outslip.preparedBy || 'WEB ADMINISTRATOR',
           deliveredByPosition: 'Project Manager',
           receivedBy: outslip.receivedBy || '',
+          receivedAt: '',
+          receivedRemarks: '',
+          qrToken: newDeliveryReceiptQrToken(),
           remarks: outslip.remarks,
           status: 'active',
         },
@@ -594,6 +678,9 @@ export function ErpProvider({ children }: { children: ReactNode }) {
             deliveredBy: outslip.releasedBy || outslip.preparedBy || 'WEB ADMINISTRATOR',
             deliveredByPosition: 'Project Manager',
             receivedBy: outslip.receivedBy || '',
+            receivedAt: '',
+            receivedRemarks: '',
+            qrToken: newDeliveryReceiptQrToken(),
             remarks: outslip.remarks,
             status: 'active',
           },
@@ -632,6 +719,32 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         )
       }
       return {}
+    }
+
+    function confirmDeliveryReceiptReceived(
+      receiptId: string,
+      confirmation: { receivedBy: string; receivedAt: string; remarks: string },
+    ) {
+      const existing = deliveryReceipts.find((row) => row.id === receiptId)
+      if (!existing) return { error: 'Delivery Receipt not found.' }
+      if (existing.status === 'received') {
+        return { already: true, receipt: existing, error: 'This delivery was already confirmed.' }
+      }
+      const outslip = outslips.find((row) => row.id === existing.outslipId)
+      if (!outslip || outslip.status !== 'released') {
+        return { error: 'This delivery cannot be confirmed until the outslip is released.' }
+      }
+      const next: DeliveryReceipt = {
+        ...existing,
+        status: 'received',
+        receivedBy: confirmation.receivedBy,
+        receivedAt: confirmation.receivedAt,
+        receivedRemarks: confirmation.remarks,
+      }
+      setDeliveryReceipts((current) =>
+        current.map((row) => (row.id === receiptId && row.status !== 'received' ? next : row)),
+      )
+      return { receipt: next }
     }
 
     function createGatePassFromOutslip(outslipId: string) {
@@ -690,12 +803,14 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       createOutslipFromPO,
       createReceivingFromPO,
       confirmReceiving,
+      receiveScannedItem,
       saveOutslipDraft,
       updateOutslipStatus,
       createDeliveryReceiptFromOutslip,
       createGatePassAndDeliveryReceipt,
       updateDeliveryReceipt,
       updateDeliveryReceiptStatus,
+      confirmDeliveryReceiptReceived,
       createGatePassFromOutslip,
       updateGatePass,
     }

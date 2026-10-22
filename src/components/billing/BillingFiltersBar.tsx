@@ -1,5 +1,5 @@
 import { FormField, Input } from '@/components/ui/input'
-import type { BillingFilterStatus, BillingFilters } from '@/data/billingTypes'
+import type { BillingFilters } from '@/data/billingTypes'
 import { Search } from 'lucide-react'
 
 interface BillingFiltersBarProps {
@@ -23,7 +23,7 @@ export function BillingFiltersBar({ filters, onChange }: BillingFiltersBarProps)
           className="pl-9"
         />
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:w-[36rem]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[24rem]">
         <FormField label="Date From" labelClassName="text-xs font-normal text-text-secondary">
           <Input
             type="date"
@@ -37,23 +37,6 @@ export function BillingFiltersBar({ filters, onChange }: BillingFiltersBarProps)
             value={filters.dateTo}
             onChange={(event) => onChange({ ...filters, dateTo: event.target.value })}
           />
-        </FormField>
-        <FormField label="Status" labelClassName="text-xs font-normal text-text-secondary">
-          <select
-            value={filters.status}
-            onChange={(event) =>
-              onChange({
-                ...filters,
-                status: event.target.value as BillingFilterStatus,
-              })
-            }
-            className="flex h-9 w-full rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary focus-visible:border-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-light"
-          >
-            <option value="all">All Status</option>
-            <option value="unpaid">Unpaid</option>
-            <option value="partial">Partially Paid</option>
-            <option value="paid">Paid</option>
-          </select>
         </FormField>
       </div>
     </div>

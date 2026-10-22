@@ -10,6 +10,7 @@ import {
   saveSettings,
   type AppSettings,
 } from '@/lib/api'
+import { applyPrintPaperSize } from '@/lib/paperSize'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 
 const LOCAL_KEY = 'erp-settings'
@@ -73,7 +74,9 @@ export function SettingsPage() {
   useEffect(() => {
     fetchSettings()
       .then((data) => {
-        setForm({ ...defaultSettings, ...data })
+        const next = { ...defaultSettings, ...data }
+        setForm(next)
+        applyPrintPaperSize(next.paper_size)
       })
       .catch(() => {
         // Keep locally saved settings when the API is unavailable.
@@ -91,6 +94,7 @@ export function SettingsPage() {
     setStatus(null)
 
     localStorage.setItem(LOCAL_KEY, JSON.stringify(form))
+    applyPrintPaperSize(form.paper_size)
 
     try {
       await saveSettings(form)
@@ -220,6 +224,7 @@ export function SettingsPage() {
               >
                 <option value="A4">A4</option>
                 <option value="Letter">Letter</option>
+                <option value="Legal">Legal</option>
               </FieldSelect>
             </FormField>
           </CardContent>

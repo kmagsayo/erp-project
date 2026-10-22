@@ -1,24 +1,31 @@
 import { PageHeader } from '@/components/layout/PageHeader'
 import { SoaDocument } from '@/components/soa/SoaDocument'
 import { SoaLedger } from '@/components/soa/SoaLedger'
-import { SoaPreviewModal } from '@/components/soa/SoaPreviewModal'
 import { Button } from '@/components/ui/button'
 import { FormField, Input } from '@/components/ui/input'
 import type { Billing } from '@/data/billingTypes'
+import type { SoaLine } from '@/data/soaTypes'
 import { useSetupCustomers } from '@/hooks/useSetupCustomers'
 import { initialBillings, loadBillings } from '@/lib/billings'
-import { buildSoaFromBillings, buildSoaPrintDocument } from '@/lib/soa'
+import { buildSoaFromBillings, buildSoaPrintDocument, formatSoaPrintMoney } from '@/lib/soa'
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { flushSync } from 'react-dom'
 
 export function StatementOfAccountPage() {
   const customers = useSetupCustomers()
-  const [searchParams, setSearchParams] = useSearchParams()
   const [billings, setBillings] = useState<Billing[]>(() => loadBillings(initialBillings))
-  const [customerId, setCustomerId] = useState(searchParams.get('customerId') ?? '')
+  const [customerId, setCustomerId] = useState('')
+  const [draftFrom, setDraftFrom] = useState('')
+  const [draftTo, setDraftTo] = useState('')
+  const [draftReference, setDraftReference] = useState('')
+  const [draftType, setDraftType] = useState<'all' | 'billing' | 'payment'>('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [reference, setReference] = useState('')
+  const [transactionType, setTransactionType] = useState<'all' | 'billing' | 'payment'>('all')
+  const [searched, setSearched] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [printBillingId, setPrintBillingId] = useState<string | null>(null)
 
   useEffect(() => {
     function refresh() {
@@ -55,33 +62,6 @@ export function StatementOfAccountPage() {
     return [...options.values()]
   }, [customers, billings])
 
-  useEffect(() => {
-    if (customerId) return
-    const fromUrl = searchParams.get('customerId')
-    if (fromUrl && customerOptions.some((row) => row.id === fromUrl)) {
-      setCustomerId(fromUrl)
-      return
-    }
-    if (billings[0]?.customerId) {
-      setCustomerId(billings[0].customerId)
-      return
-    }
-    if (customerOptions.length > 0) {
-      setCustomerId(customerOptions[0].id)
-    }
-  }, [customerId, customerOptions, billings, searchParams])
-
-  useEffect(() => {
-    const current = searchParams.get('customerId') ?? ''
-    if (!customerId || customerId.startsWith('name:')) {
-      if (!current) return
-      setSearchParams({}, { replace: true })
-      return
-    }
-    if (current === customerId) return
-    setSearchParams({ customerId }, { replace: true })
-  }, [customerId, searchParams, setSearchParams])
-
   const selectedCustomer = customers.find((row) => row.id === customerId)
   const selectedOption = customerOptions.find((row) => row.id === customerId)
   const customerName = selectedCustomer?.name || selectedOption?.name || ''
@@ -91,116 +71,166 @@ export function StatementOfAccountPage() {
       buildSoaFromBillings(
         billings,
         customerId.startsWith('name:') ? '' : customerId,
-        dateFrom,
-        dateTo,
+        '',
+        '',
         customerName,
       ),
-    [billings, customerId, dateFrom, dateTo, customerName],
+    [billings, customerId, customerName],
   )
 
-  const printDocument = useMemo(
-    () =>
-      buildSoaPrintDocument(
-        billings,
-        customerId.startsWith('name:') ? '' : customerId,
-        dateFrom,
-        dateTo,
-        {
-          name: customerName,
-          address: selectedCustomer?.address,
-          contactPerson: selectedCustomer?.contactPerson,
-        },
-      ),
-    [
-      billings,
-      customerId,
-      dateFrom,
-      dateTo,
-      customerName,
-      selectedCustomer?.address,
-      selectedCustomer?.contactPerson,
-    ],
-  )
+  const visibleLines = useMemo(() => {
+    const needle = reference.trim().toLowerCase()
+    return soa.lines.filter((line) => {
+      if (dateFrom && line.transactionDate < dateFrom) return false
+      if (dateTo && line.transactionDate > dateTo) return false
+      if (needle && !line.reference.toLowerCase().includes(needle)) return false
+      if (transactionType !== 'all' && line.kind !== transactionType) return false
+      return true
+    })
+  }, [dateFrom, dateTo, reference, soa.lines, transactionType])
 
-  function handlePreview() {
-    if (!customerId) {
-      window.alert('Please select a customer.')
-      return
-    }
-    setPreviewOpen(true)
-  }
+  const printDocument = useMemo(() => {
+    const billing = billings.find((row) => row.id === printBillingId)
+    if (!billing) return null
+    return buildSoaPrintDocument(
+      [billing],
+      billing.customerId,
+      '',
+      '',
+      {
+        name: billing.customerName || customerName,
+        address: selectedCustomer?.address,
+        contactPerson: selectedCustomer?.contactPerson,
+      },
+    )
+  }, [billings, customerName, printBillingId, selectedCustomer?.address, selectedCustomer?.contactPerson])
 
-  function handlePrint() {
-    if (!customerId) {
-      window.alert('Please select a customer.')
-      return
-    }
-    setPreviewOpen(false)
-    requestAnimationFrame(() => window.print())
+  function handlePrint(line: SoaLine) {
+    flushSync(() => setPrintBillingId(line.billingId))
+    window.print()
   }
 
   return (
     <div>
       <div className="no-print">
-        <PageHeader
-          title="Statement of Account"
-          description="Generated from billing statements and payments."
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="secondary" onClick={handlePreview}>
-                Preview
+        <PageHeader title="Statement of Account" />
+
+        <div className="rounded-lg border border-border bg-surface px-5 py-5">
+          <div className="flex flex-wrap items-end gap-2">
+              <FormField label="Client" labelClassName="text-xs font-normal text-text-secondary">
+                <select
+                  aria-label="Client"
+                  value={customerId}
+                  onChange={(event) => {
+                    setCustomerId(event.target.value)
+                    setSearched(false)
+                    setSearchError(null)
+                  }}
+                  className="flex h-9 min-w-48 rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary focus-visible:border-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-light"
+                >
+                  <option value="">Select client</option>
+                  {customerOptions.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Date From" labelClassName="text-xs font-normal text-text-secondary">
+                <Input
+                  type="date"
+                  value={draftFrom}
+                  onChange={(event) => setDraftFrom(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Date To" labelClassName="text-xs font-normal text-text-secondary">
+                <Input
+                  type="date"
+                  value={draftTo}
+                  onChange={(event) => setDraftTo(event.target.value)}
+                />
+              </FormField>
+              <FormField label="Reference" labelClassName="text-xs font-normal text-text-secondary">
+                <Input
+                  value={draftReference}
+                  onChange={(event) => setDraftReference(event.target.value)}
+                  placeholder="Reference no."
+                />
+              </FormField>
+              <FormField
+                label="Transaction Type"
+                labelClassName="text-xs font-normal text-text-secondary"
+              >
+                <select
+                  value={draftType}
+                  onChange={(event) =>
+                    setDraftType(event.target.value as 'all' | 'billing' | 'payment')
+                  }
+                  className="flex h-9 w-full rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary focus-visible:border-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-light"
+                >
+                  <option value="all">All</option>
+                  <option value="billing">Billing</option>
+                  <option value="payment">Payment</option>
+                </select>
+              </FormField>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setCustomerId('')
+                  setDraftFrom('')
+                  setDraftTo('')
+                  setDraftReference('')
+                  setDraftType('all')
+                  setDateFrom('')
+                  setDateTo('')
+                  setReference('')
+                  setTransactionType('all')
+                  setSearched(false)
+                  setSearchError(null)
+                }}
+              >
+                Reset
               </Button>
-              <Button type="button" variant="secondary" onClick={handlePrint}>
-                Print
+              <Button
+                type="button"
+                onClick={() => {
+                  if (!customerId) {
+                    setSearchError('Select a client first.')
+                    setSearched(false)
+                    return
+                  }
+                  setSearchError(null)
+                  setDateFrom(draftFrom)
+                  setDateTo(draftTo)
+                  setReference(draftReference)
+                  setTransactionType(draftType)
+                  setSearched(true)
+                }}
+              >
+                Search
               </Button>
             </div>
-          }
-        />
+          {searchError ? <p className="mt-3 text-sm text-red-700">{searchError}</p> : null}
 
-        <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <FormField label="Customer" labelClassName="text-xs font-normal text-text-secondary">
-            <select
-              value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-              className="flex h-9 w-full rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary focus-visible:border-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-light"
-            >
-              <option value="">Select customer...</option>
-              {customerOptions.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </FormField>
-          <FormField label="Date From" labelClassName="text-xs font-normal text-text-secondary">
-            <Input
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-            />
-          </FormField>
-          <FormField label="Date To" labelClassName="text-xs font-normal text-text-secondary">
-            <Input
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-            />
-          </FormField>
+          {searched ? (
+            <div className="mt-6">
+              <p className="text-sm text-text-secondary">Ledger</p>
+              <p className="text-sm font-medium text-text-primary">{customerName}</p>
+              <p className="mt-3 text-2xl font-semibold text-text-primary">
+                Balance: {formatSoaPrintMoney(soa.outstandingBalance)}
+              </p>
+              <div className="mt-6">
+                <SoaLedger soa={soa} lines={visibleLines} onPrint={handlePrint} />
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        <SoaLedger soa={soa} />
-
-        {previewOpen ? (
-          <SoaPreviewModal
-            printDocument={printDocument}
-            onClose={() => setPreviewOpen(false)}
-            onPrint={handlePrint}
-          />
-        ) : null}
       </div>
 
       <div className="soa-print-root">
-        <SoaDocument document={printDocument} />
+        {printDocument ? <SoaDocument document={printDocument} /> : null}
       </div>
     </div>
   )

@@ -97,6 +97,7 @@ const deliveryStatusLabel: Record<DeliveryReceipt['status'], string> = {
   out_for_delivery: 'Out for Delivery',
   partially_delivered: 'Partially Delivered',
   delivered: 'Delivered',
+  received: 'Received',
 }
 
 function fromQuotation(row: Quotation, catalog: CatalogPrice[]): ScannedTransaction {

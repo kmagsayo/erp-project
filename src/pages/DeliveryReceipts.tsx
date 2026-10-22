@@ -1,5 +1,4 @@
-import { DeliveryReceiptBarcodeScanner } from '@/components/delivery-receipts/DeliveryReceiptBarcodeScanner'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
+import { DeliveryItemQrPopup } from '@/components/delivery-receipts/DeliveryItemQrPopup'
 import { DeliveryReceiptDetailModal } from '@/components/delivery-receipts/DeliveryReceiptDetailModal'
 import { DeliveryReceiptDocument } from '@/components/delivery-receipts/DeliveryReceiptDocument'
 import { DeliveryReceiptFiltersBar } from '@/components/delivery-receipts/DeliveryReceiptFiltersBar'
@@ -12,29 +11,23 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Toast } from '@/components/ui/toast'
 import { useErp } from '@/data/erpStore'
 import type { DeliveryReceipt, DeliveryReceiptStatus } from '@/data/erpTypes'
-import type { ItemSetup } from '@/data/setupTypes'
 import { createBillingFromDeliveryReceipt } from '@/lib/billings'
+import { registerDeliveryReceiptToken } from '@/lib/deliveryReceiptConfirmation'
 import {
-  applyBarcodeScan,
   countDeliveryReceiptStatuses,
   deliveryProgress,
   filterDeliveryReceipts,
-  findOutslipItemForCatalog,
   formatDrDisplayDate,
   formatDrMoney,
-  matchCatalogItemByBarcode,
   mergeReceiptWithOutslip,
-  quantityExceededMessage,
-  remainingDeliveryQty,
+  markDeliveryItemReceived,
+  parseDeliveryItemQr,
   withOutslipAmounts,
   type DeliveryReceiptFilters,
 } from '@/lib/deliveryReceipts'
 import { useSetupCustomers } from '@/hooks/useSetupCustomers'
 import { useSetupItems } from '@/hooks/useSetupItems'
-import { cn } from '@/lib/utils'
-import { ApiError } from '@/lib/api'
-import { findCatalogItemByBarcode } from '@/lib/setupsApi'
-import { findTransactionByCode, requestBarcodeLookup } from '@/lib/transactionBarcode'
+import { request } from '@/lib/api'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
@@ -53,6 +46,7 @@ const viewStatusBadge: Record<
   out_for_delivery: 'out_for_delivery',
   partially_delivered: 'partially_delivered',
   delivered: 'completed',
+  received: 'completed',
 }
 
 const viewStatusLabel: Record<DeliveryReceipt['status'], string> = {
@@ -60,6 +54,7 @@ const viewStatusLabel: Record<DeliveryReceipt['status'], string> = {
   out_for_delivery: 'Out for Delivery',
   partially_delivered: 'Partially Delivered',
   delivered: 'Delivered',
+  received: 'Received',
 }
 
 export function DeliveryReceiptsPage() {
@@ -67,8 +62,6 @@ export function DeliveryReceiptsPage() {
     deliveryReceipts,
     outslips,
     purchaseOrders,
-    receivings,
-    gatePasses,
     createDeliveryReceiptFromOutslip,
     updateDeliveryReceipt,
     updateDeliveryReceiptStatus,
@@ -84,21 +77,14 @@ export function DeliveryReceiptsPage() {
   const [detailId, setDetailId] = useState<string | null>(null)
   const [confirmDelivered, setConfirmDelivered] = useState(false)
   const [viewReceipt, setViewReceipt] = useState<DeliveryReceipt | null>(null)
+  const [itemQrId, setItemQrId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [printTarget, setPrintTarget] = useState<DeliveryReceipt | null>(null)
   const createdFrom = useRef<string | null>(null)
-  const [barcode, setBarcode] = useState('')
-  const [scanBusy, setScanBusy] = useState(false)
-  const [scanStatus, setScanStatus] = useState('Scan the item barcode, then the serial number.')
-  const [scanTone, setScanTone] = useState<'ready' | 'success' | 'error'>('ready')
-  const [lastScanned, setLastScanned] = useState<{
-    name: string
-    serial: string
-    itemCode: string
-  } | null>(null)
-  const [pendingSerial, setPendingSerial] = useState<ItemSetup | null>(null)
-  const scanLock = useRef(false)
+  const registeredTokens = useRef(new Set<string>())
+  const deliveryReceiptsRef = useRef(deliveryReceipts)
+  deliveryReceiptsRef.current = deliveryReceipts
 
   const statusCounts = useMemo(
     () => countDeliveryReceiptStatuses(deliveryReceipts),
@@ -117,6 +103,67 @@ export function DeliveryReceiptsPage() {
     if (state.highlightId) setSelectedId(state.highlightId)
     navigate('.', { replace: true, state: null })
   }, [location.state, navigate])
+
+  useEffect(() => {
+    for (const receipt of deliveryReceipts) {
+      if (!receipt.qrToken || registeredTokens.current.has(receipt.qrToken)) continue
+      registeredTokens.current.add(receipt.qrToken)
+      void registerDeliveryReceiptToken(receipt.qrToken, receipt.id).catch(() => {
+        registeredTokens.current.delete(receipt.qrToken)
+      })
+    }
+  }, [deliveryReceipts])
+
+  useEffect(() => {
+    if (!viewReceipt) return
+    const receiptId = viewReceipt.id
+    let stopped = false
+
+    async function poll() {
+      try {
+        const response = await request<{ data: { codes: string[] } }>('/receiving-scans')
+        const codes = (response.data?.codes ?? []).filter((code) => {
+          const parsed = parseDeliveryItemQr(code)
+          return parsed?.receiptId === receiptId
+        })
+        if (stopped || codes.length === 0) return
+        let latest = deliveryReceiptsRef.current.find((row) => row.id === receiptId)
+        if (!latest) return
+        const claimed: string[] = []
+        let changed = false
+        for (const code of codes) {
+          const parsed = parseDeliveryItemQr(code)
+          if (!parsed) continue
+          const marked = markDeliveryItemReceived(latest, parsed.itemId)
+          if ('error' in marked) continue
+          if (!marked.already) {
+            latest = marked.receipt
+            changed = true
+          }
+          claimed.push(code)
+        }
+        if (changed) {
+          updateDeliveryReceipt(latest)
+          setViewReceipt(latest)
+        }
+        if (claimed.length > 0) {
+          await request('/receiving-scans/claim', {
+            method: 'POST',
+            body: JSON.stringify({ codes: claimed }),
+          })
+        }
+      } catch {
+        // The next poll retries a scan that has not been claimed.
+      }
+    }
+
+    void poll()
+    const timer = window.setInterval(() => void poll(), 1500)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [viewReceipt?.id])
 
   useEffect(() => {
     const fromOutslip = params.get('from')
@@ -235,23 +282,6 @@ export function DeliveryReceiptsPage() {
     })
   }
 
-  function resetScanner(status?: DeliveryReceipt['status']) {
-    setBarcode('')
-    setPendingSerial(null)
-    if (status === 'delivered') {
-      setScanStatus('This delivery receipt is already completed.')
-      setScanTone('error')
-      return
-    }
-    setScanStatus('Scan the item barcode, then the serial number.')
-    setScanTone('ready')
-  }
-
-  function persistScannedReceipt(next: DeliveryReceipt) {
-    updateDeliveryReceipt(next)
-    setViewReceipt(next)
-  }
-
   function openView(receipt: DeliveryReceipt) {
     const latest = deliveryReceipts.find((row) => row.id === receipt.id) ?? receipt
     const outslip = outslips.find((row) => row.id === latest.outslipId)
@@ -269,128 +299,13 @@ export function DeliveryReceiptsPage() {
     }
     setSelectedId(merged.id)
     setViewReceipt(structuredClone(merged))
-    setLastScanned(null)
+    setItemQrId(null)
     setMessage(null)
-    resetScanner(merged.status)
-  }
-
-  async function handleBarcodeScan(scanned: string) {
-    const transaction = findTransactionByCode(scanned, {
-      purchaseOrders,
-      receivings,
-      outslips,
-      gatePasses,
-      deliveryReceipts,
-    })
-    if (transaction) {
-      requestBarcodeLookup(scanned)
-      setBarcode('')
-      setScanStatus(`Opened ${transaction.label} ${transaction.number}.`)
-      setScanTone('ready')
-      return
-    }
-
-    if (!viewReceipt || scanLock.current) return
-
-    const outslip = outslips.find((row) => row.id === viewReceipt.outslipId)
-    if (!outslip) {
-      setScanStatus('This Delivery Receipt is not linked to an Outslip.')
-      setScanTone('error')
-      setBarcode('')
-      return
-    }
-
-    if (viewReceipt.status === 'delivered') {
-      setScanStatus('This delivery receipt is already completed.')
-      setScanTone('error')
-      setBarcode('')
-      return
-    }
-
-    scanLock.current = true
-    setBarcode('')
-    setScanBusy(true)
-    try {
-      if (pendingSerial) {
-        let maybeItem: ItemSetup | undefined
-        try {
-          const result = await findCatalogItemByBarcode(scanned)
-          maybeItem = matchCatalogItemByBarcode(result.items, scanned)
-        } catch {
-          maybeItem = undefined
-        }
-        if (maybeItem) {
-          setPendingSerial(maybeItem)
-          setScanStatus(`Scan the serial number for ${maybeItem.item_name}.`)
-          setScanTone('ready')
-          return
-        }
-
-        const applied = applyBarcodeScan(
-          viewReceipt,
-          outslip,
-          pendingSerial,
-          pendingSerial.barcode || scanned,
-          { serialNumber: scanned },
-        )
-        setScanStatus(applied.message)
-        setScanTone(applied.ok ? 'success' : 'error')
-        if (applied.ok) {
-          setPendingSerial(null)
-          setLastScanned({
-            name: applied.scannedItem?.description || pendingSerial.item_name,
-            serial: scanned,
-            itemCode: applied.scannedItem?.itemCode || pendingSerial.item_code,
-          })
-          persistScannedReceipt(applied.receipt)
-          if (applied.receipt.status === 'delivered') {
-            setScanStatus('All items delivered.')
-          }
-        }
-        return
-      }
-
-      const result = await findCatalogItemByBarcode(scanned)
-      const catalog = matchCatalogItemByBarcode(result.items, scanned)
-      if (!catalog) {
-        setScanStatus('Scan the item barcode first, then the serial number.')
-        setScanTone('error')
-        return
-      }
-
-      const outslipItem = findOutslipItemForCatalog(outslip, catalog)
-      if (!outslipItem) {
-        setScanStatus('Item is not included in this Outslip.')
-        setScanTone('error')
-        return
-      }
-
-      const existing = viewReceipt.items.find(
-        (item) => item.itemCode.trim().toLowerCase() === outslipItem.itemCode.trim().toLowerCase(),
-      )
-      if ((existing?.quantity ?? 0) >= outslipItem.releasedQuantity) {
-        setScanStatus(quantityExceededMessage(outslipItem.releasedQuantity))
-        setScanTone('error')
-        return
-      }
-
-      setPendingSerial(catalog)
-      setScanStatus(`Scan the serial number for ${catalog.item_name}.`)
-      setScanTone('ready')
-      return
-    } catch (err) {
-      setScanStatus(
-        err instanceof ApiError ? err.message : 'Unable to look up the item catalog.',
-      )
-      setScanTone('error')
-    } finally {
-      setScanBusy(false)
-      scanLock.current = false
-    }
   }
 
   if (viewReceipt) {
     const progress = deliveryProgress(viewReceipt.items)
+    const itemQr = viewReceipt.items.find((item) => item.id === itemQrId) ?? null
     return (
       <div>
         <div className="no-print">
@@ -403,45 +318,13 @@ export function DeliveryReceiptsPage() {
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle>View {viewReceipt.id}</CardTitle>
-                <TransactionBarcode value={viewReceipt.id} />
               </div>
               <Badge variant={viewStatusBadge[viewReceipt.status]}>
                 {viewStatusLabel[viewReceipt.status]}
               </Badge>
             </CardHeader>
             <CardContent className="space-y-4">
-              <DeliveryReceiptBarcodeScanner
-                value={barcode}
-                status={scanStatus}
-                tone={scanTone}
-                busy={scanBusy}
-                serialMode={Boolean(pendingSerial)}
-                disabled={viewReceipt.status === 'delivered'}
-                onChange={setBarcode}
-                onScan={(code) => void handleBarcodeScan(code)}
-              />
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-border bg-surface px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-                    Last Scanned Item
-                  </p>
-                  {lastScanned ? (
-                    <div className="mt-2 space-y-1 text-sm">
-                      <p>
-                        <span className="text-text-secondary">Last Scanned:</span>{' '}
-                        <span className="font-medium text-text-primary">{lastScanned.name}</span>
-                      </p>
-                      <p>
-                        <span className="text-text-secondary">Serial Number:</span>{' '}
-                        <span className="font-medium text-text-primary">{lastScanned.serial}</span>
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-sm text-text-secondary">No item scanned yet.</p>
-                  )}
-                </div>
-                <div className="rounded-lg border border-border bg-surface px-4 py-3">
+              <div className="rounded-lg border border-border bg-surface px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
                     Delivery Progress
                   </p>
@@ -455,7 +338,6 @@ export function DeliveryReceiptsPage() {
                       style={{ width: `${Math.min(100, progress.percent)}%` }}
                     />
                   </div>
-                </div>
               </div>
 
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -502,11 +384,8 @@ export function DeliveryReceiptsPage() {
                     <tr>
                       <th className="px-3 py-2">Item</th>
                       <th className="px-3 py-2">Item Code</th>
-                      <th className="px-3 py-2">Serial Number</th>
-                      <th className="px-3 py-2">Released Qty</th>
-                      <th className="px-3 py-2">Scanned Qty</th>
-                      <th className="px-3 py-2">Remaining Qty</th>
-                      <th className="px-3 py-2">Unit</th>
+                      <th className="px-3 py-2 text-center">Ordered</th>
+                      <th className="px-3 py-2 text-center">Received</th>
                       <th className="px-3 py-2 text-right">Unit Price</th>
                       <th className="px-3 py-2 text-right">Total</th>
                     </tr>
@@ -514,7 +393,7 @@ export function DeliveryReceiptsPage() {
                   <tbody>
                     {viewReceipt.items.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="px-3 py-6 text-center text-text-secondary">
+                        <td colSpan={6} className="px-3 py-6 text-center text-text-secondary">
                           No items on the referenced Outslip.
                         </td>
                       </tr>
@@ -522,22 +401,13 @@ export function DeliveryReceiptsPage() {
                       viewReceipt.items.map((item) => (
                         <tr
                           key={item.id}
-                          className={cn(
-                            'border-t border-border',
-                            lastScanned?.itemCode &&
-                              item.itemCode === lastScanned.itemCode &&
-                              'bg-maroon-light/50',
-                          )}
+                          className="cursor-pointer border-t border-border hover:bg-maroon-light/40"
+                          onClick={() => setItemQrId(item.id)}
                         >
                           <td className="px-3 py-2">{item.description}</td>
                           <td className="px-3 py-2">{item.itemCode}</td>
-                          <td className="px-3 py-2">
-                            {item.serialNumbers.length > 0 ? item.serialNumbers.join(', ') : '—'}
-                          </td>
-                          <td className="px-3 py-2">{item.allowedQuantity}</td>
-                          <td className="px-3 py-2">{item.quantity}</td>
-                          <td className="px-3 py-2">{remainingDeliveryQty(item)}</td>
-                          <td className="px-3 py-2">{item.unit}</td>
+                          <td className="px-3 py-2 text-center">{item.allowedQuantity}</td>
+                          <td className="px-3 py-2 text-center">{item.quantity}</td>
                           <td className="px-3 py-2 text-right">{formatDrMoney(item.unitPrice)}</td>
                           <td className="px-3 py-2 text-right">{formatDrMoney(item.total)}</td>
                         </tr>
@@ -559,8 +429,7 @@ export function DeliveryReceiptsPage() {
                   variant="secondary"
                   onClick={() => {
                     setViewReceipt(null)
-                    setLastScanned(null)
-                    setPendingSerial(null)
+                    setItemQrId(null)
                     setMessage(null)
                   }}
                 >
@@ -584,6 +453,13 @@ export function DeliveryReceiptsPage() {
         <div className="dr-print-root">
           <DeliveryReceiptDocument receipt={viewReceipt} />
         </div>
+        {itemQr ? (
+          <DeliveryItemQrPopup
+            receiptId={viewReceipt.id}
+            item={itemQr}
+            onClose={() => setItemQrId(null)}
+          />
+        ) : null}
       </div>
     )
   }
@@ -592,10 +468,7 @@ export function DeliveryReceiptsPage() {
     <div>
       <div className="no-print">
         {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
-        <PageHeader
-          breadcrumb="Transaction / Delivery Receipt"
-          title="Delivery Receipt"
-        />
+        <PageHeader breadcrumb="Transaction / Delivery Receipt" title="Delivery Receipt" />
 
         <DeliveryReceiptFiltersBar
           filters={filters}
@@ -616,7 +489,6 @@ export function DeliveryReceiptsPage() {
             selectedId={selectedId}
             onSelect={openDetails}
             onView={openView}
-            onPrint={handlePrint}
           />
         )}
 

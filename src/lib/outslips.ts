@@ -22,6 +22,55 @@ export const outslipListStatusLabel: Record<OutslipStatus, string> = {
 export { formatDisplayDate, paginateItems }
 
 const STORAGE_KEY = 'erp-outslips'
+const UNDO_CREATED_OUTSLIP_KEY = 'erp-undo-created-outslip-2'
+
+export function undoCreatedOutslip() {
+  if (localStorage.getItem(UNDO_CREATED_OUTSLIP_KEY)) return
+  localStorage.setItem(UNDO_CREATED_OUTSLIP_KEY, '1')
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    const rows = raw ? (JSON.parse(raw) as Outslip[]) : []
+    if (!Array.isArray(rows) || rows.length === 0) return
+
+    const fromReceiving = rows.filter((row) => row.receivingId && row.status !== 'cancelled')
+    const pool = fromReceiving.length > 0 ? fromReceiving : rows
+    const latest = [...pool].sort((a, b) => parseNumberFromId(a.id) - parseNumberFromId(b.id)).at(-1)
+    if (!latest) return
+
+    const removed = new Set([latest.id])
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.filter((row) => !removed.has(row.id))))
+    clearOutslipLink('erp-purchase-orders', removed)
+    removeLinkedRows('erp-gate-passes', removed)
+    removeLinkedRows('erp-delivery-receipts', removed)
+  } catch {
+    localStorage.removeItem(UNDO_CREATED_OUTSLIP_KEY)
+  }
+}
+
+function clearOutslipLink(key: string, removed: Set<string>) {
+  const raw = localStorage.getItem(key)
+  if (!raw) return
+  const rows = JSON.parse(raw) as Array<{ outslipId?: string }>
+  if (!Array.isArray(rows)) return
+  localStorage.setItem(
+    key,
+    JSON.stringify(
+      rows.map((row) => (row.outslipId && removed.has(row.outslipId) ? { ...row, outslipId: '' } : row)),
+    ),
+  )
+}
+
+function removeLinkedRows(key: string, removed: Set<string>) {
+  const raw = localStorage.getItem(key)
+  if (!raw) return
+  const rows = JSON.parse(raw) as Array<{ outslipId?: string }>
+  if (!Array.isArray(rows)) return
+  localStorage.setItem(
+    key,
+    JSON.stringify(rows.filter((row) => !row.outslipId || !removed.has(row.outslipId))),
+  )
+}
 
 function parseNumberFromId(id: string): number {
   const numeric = Number(id.split('-').at(-1) ?? 0)

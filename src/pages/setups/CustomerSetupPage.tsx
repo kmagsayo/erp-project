@@ -34,6 +34,7 @@ const emptyForm = {
   tin: '',
   terms: '',
   terms_type: '',
+  status: 'active',
 }
 
 const termsTypeOptions = ['IN DAYS', 'NET']
@@ -109,6 +110,7 @@ export function CustomerSetupPage() {
       tin: row.tin ?? '',
       terms: row.terms == null ? '' : String(row.terms),
       terms_type: row.terms_type ?? '',
+      status: row.status === 'inactive' ? 'inactive' : 'active',
     })
     setFormError(null)
     setFormOpen(true)
@@ -125,7 +127,7 @@ export function CustomerSetupPage() {
       tin: form.tin.trim(),
       terms: form.terms === '' ? null : Number(form.terms),
       terms_type: form.terms_type || null,
-      status: editing?.status || 'active',
+      status: form.status,
     }
     try {
       if (editing) {
@@ -286,7 +288,7 @@ export function CustomerSetupPage() {
 
       {formOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-border bg-surface shadow-lg">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface shadow-lg">
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
               <h2 className="text-lg font-semibold text-text-primary">
                 {editing ? 'Edit Customer' : 'Add Customer'}
@@ -307,6 +309,18 @@ export function CustomerSetupPage() {
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
                 />
+              </FormField>
+              <FormField label="Status">
+                <select
+                  value={form.status}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, status: event.target.value }))
+                  }
+                  className={selectClassName}
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </FormField>
               <FormField label="Address">
                 <Input

@@ -14,7 +14,7 @@ class SupplierService
 
     public function getSuppliers(Request $request)
     {
-        $query = Supplier::query()->orderBy('name');
+        $query = Supplier::query()->orderBy('code');
 
         $this->applySearch($query, $request->query('search'), [
             'name',

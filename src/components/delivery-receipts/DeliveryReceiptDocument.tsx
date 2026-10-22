@@ -1,5 +1,4 @@
 import logo from '@/assets/logo.png'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { companyInfo } from '@/data/accomplishmentReports'
 import type { DeliveryReceipt } from '@/data/erpTypes'
 import { deliveryReceiptBrandAndSerials } from '@/lib/deliveryReceipts'
@@ -57,7 +56,6 @@ export function DeliveryReceiptDocument({ receipt }: { receipt: DeliveryReceipt 
             <span>Delivery No.:</span>
             <span>{receipt.id}</span>
           </div>
-          <TransactionBarcode value={receipt.id} />
         </div>
       </div>
 
@@ -71,7 +69,7 @@ export function DeliveryReceiptDocument({ receipt }: { receipt: DeliveryReceipt 
           <tr>
             <th className="dr-col-no">NO.</th>
             <th className="dr-col-desc">ITEM DESCRIPTION</th>
-            <th className="dr-col-brand">BRAND/SERIAL NO.</th>
+            <th className="dr-col-brand">BRAND</th>
             <th className="dr-col-qty">QTY.</th>
             <th className="dr-col-unit">UNIT</th>
             <th className="dr-col-price">Unit Price</th>
@@ -80,16 +78,12 @@ export function DeliveryReceiptDocument({ receipt }: { receipt: DeliveryReceipt 
         </thead>
         <tbody>
           {receipt.items.map((item, index) => {
-            const { brand, serials } = deliveryReceiptBrandAndSerials(item)
+            const { brand } = deliveryReceiptBrandAndSerials(item)
             return (
             <tr key={item.id}>
               <td className="dr-col-no">{index + 1}</td>
               <td className="dr-col-desc">{item.description}</td>
-              <td className="dr-col-brand">
-                {brand ? <div className="dr-brand-name">{brand}</div> : null}
-                {serials ? <div className="dr-brand-serials">{serials}</div> : null}
-                {!brand && !serials ? '—' : null}
-              </td>
+              <td className="dr-col-brand">{brand || '—'}</td>
               <td className="dr-col-qty">{item.quantity}</td>
               <td className="dr-col-unit">{item.unit}</td>
               <td className="dr-col-price">{formatMoney(item.unitPrice)}</td>

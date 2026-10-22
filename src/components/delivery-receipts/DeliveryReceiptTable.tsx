@@ -10,13 +10,14 @@ import {
 } from '@/components/ui/table'
 import type { DeliveryReceipt } from '@/data/erpTypes'
 import { formatDrDisplayDate, formatDrMoney } from '@/lib/deliveryReceipts'
-import { Eye, Printer } from 'lucide-react'
+import { Eye } from 'lucide-react'
 
 const statusBadge: Record<DeliveryReceipt['status'], 'active' | 'out_for_delivery' | 'partially_delivered' | 'completed'> = {
   active: 'active',
   out_for_delivery: 'out_for_delivery',
   partially_delivered: 'partially_delivered',
   delivered: 'completed',
+  received: 'completed',
 }
 
 const statusLabel: Record<DeliveryReceipt['status'], string> = {
@@ -24,6 +25,7 @@ const statusLabel: Record<DeliveryReceipt['status'], string> = {
   out_for_delivery: 'Out for Delivery',
   partially_delivered: 'Partially Delivered',
   delivered: 'Delivered',
+  received: 'Received',
 }
 
 interface DeliveryReceiptTableProps {
@@ -31,7 +33,6 @@ interface DeliveryReceiptTableProps {
   selectedId: string | null
   onSelect: (receipt: DeliveryReceipt) => void
   onView: (receipt: DeliveryReceipt) => void
-  onPrint: (receipt: DeliveryReceipt) => void
 }
 
 export function DeliveryReceiptTable({
@@ -39,7 +40,6 @@ export function DeliveryReceiptTable({
   selectedId,
   onSelect,
   onView,
-  onPrint,
 }: DeliveryReceiptTableProps) {
   if (receipts.length === 0) {
     return (
@@ -117,17 +117,6 @@ export function DeliveryReceiptTable({
                       }}
                     >
                       <Eye className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Print ${receipt.id}`}
-                      className="rounded-md p-2 text-text-secondary hover:bg-table-header hover:text-maroon"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        onPrint(receipt)
-                      }}
-                    >
-                      <Printer className="h-4 w-4" />
                     </button>
                   </div>
                 </TableCell>

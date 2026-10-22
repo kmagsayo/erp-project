@@ -1673,6 +1673,154 @@ html.login-route #root {
   letter-spacing: 0.02em;
 }
 
+.outslip-form-page {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+}
+
+.outslip-form-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm 14mm;
+  box-sizing: border-box;
+  color: #000;
+  background: #fff;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.outslip-form-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 2mm;
+  padding-bottom: 2mm;
+  border-bottom: 2.5px solid #000;
+}
+
+.outslip-form-logo {
+  width: 16mm;
+  height: 16mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.outslip-form-company {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.outslip-form-company-name {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.outslip-form-title {
+  border-top: 2.5px solid #000;
+  border-bottom: 2.5px solid #000;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  padding: 2mm 0;
+  margin: 0 0 4mm;
+}
+
+.outslip-form-meta {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 4mm;
+  font-size: 11px;
+}
+
+.outslip-form-meta th,
+.outslip-form-meta td {
+  border: 1px solid #000;
+  padding: 3px 6px;
+  text-align: left;
+  font-weight: 400;
+}
+
+.outslip-form-meta th {
+  width: 28mm;
+  font-weight: 700;
+}
+
+.outslip-form-items {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+}
+
+.outslip-form-items th,
+.outslip-form-items td {
+  border: 1px solid #000;
+  padding: 3px 4px;
+  vertical-align: middle;
+  background: #fff;
+}
+
+.outslip-form-items th {
+  font-weight: 700;
+  text-align: center;
+  padding: 5px 3px;
+  background: #dcead5;
+}
+
+.outslip-form-empty td {
+  height: 7mm;
+}
+
+.outslip-form-nothing {
+  height: 8mm;
+  text-align: center !important;
+  font-weight: 700;
+}
+
+.osf-c { text-align: center; }
+.osf-l { text-align: left; }
+.osf-r { text-align: right; white-space: nowrap; }
+
+.outslip-form-grand {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: 8mm;
+  margin-top: 2mm;
+  font-weight: 700;
+}
+
+.outslip-form-grand-amount {
+  min-width: 28mm;
+  text-align: right;
+  border-top: 2px solid #000;
+  padding-top: 2px;
+}
+
+.receiving-line-qr {
+  display: inline-flex;
+  line-height: 0;
+  background: #fff;
+}
+
+.receiving-line-qr svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.receiving-print-qr {
+  width: 28mm;
+  text-align: center;
+  vertical-align: middle;
+}
+
 .dr-print-root {
   display: none;
   pointer-events: none;
@@ -2252,6 +2400,11 @@ html.login-route #root {
     width: 100%;
   }
 
+  .receiving-line-qr svg {
+    width: 24mm;
+    height: 24mm;
+  }
+
   /* Stay in normal flow so a multi-page report does not leave a blank sheet. */
   .report-print-root {
     position: static;
@@ -2384,6 +2537,19 @@ html.login-route #root {
   }
 
   .quotation-sheet {
+    border: none;
+    box-shadow: none;
+  }
+
+  .outslip-form-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .outslip-form-sheet {
     border: none;
     box-shadow: none;
   }

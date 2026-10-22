@@ -1,101 +1,138 @@
 import logo from '@/assets/logo.png'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { companyInfo } from '@/data/accomplishmentReports'
-import type { Outslip, OutslipItem } from '@/data/erpTypes'
+import type { Outslip } from '@/data/erpTypes'
+import { formatPrintMoney } from '@/lib/quotations'
 
-function formatLetterDate(value: string): string {
-  if (!value) return ''
-  const date = new Date(`${value}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return value
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'June',
-    'July',
-    'Aug',
-    'Sept',
-    'Oct',
-    'Nov',
-    'Dec',
-  ]
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`
+const EMPTY_ROWS = 6
+
+function formatLongDate(isoDate: string): string {
+  if (!isoDate) return ''
+  const date = new Date(`${isoDate}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return isoDate
+  return date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
-function splitCompanyName(name: string) {
-  const space = name.trim().indexOf(' ')
-  if (space === -1) return { lead: name, rest: '' }
-  return { lead: name.slice(0, space), rest: name.slice(space + 1).trim() }
-}
-
-function itemLine(item: OutslipItem): string {
-  const quantity = item.releasedQuantity > 0 ? item.releasedQuantity : item.poQuantity
-  const unit = item.unit.trim()
-  let description = item.description.trim()
-  const brand = item.brand.trim()
-  if (brand && !description.toLowerCase().includes(brand.toLowerCase())) {
-    description = `${brand} ${description}`
-  }
-  return [quantity, unit, description].filter(Boolean).join(' ')
+function receivingLabel(receivingId?: string): string {
+  if (!receivingId) return ''
+  const match = receivingId.match(/(\d+)\s*$/)
+  if (!match) return receivingId
+  return String(Number(match[1]))
 }
 
 export function OutslipDocument({ outslip }: { outslip: Outslip }) {
-  const { lead, rest } = splitCompanyName(companyInfo.name)
   const address = companyInfo.addressLines.filter(Boolean).join(', ')
-  const items = outslip.items.filter(
-    (item) => item.releasedQuantity > 0 || item.poQuantity > 0,
+  const rows = outslip.items.filter(
+    (item) => item.releasedQuantity > 0 || item.poQuantity > 0 || item.description.trim(),
   )
-  const signer = (outslip.preparedBy || outslip.approvedBy || outslip.releasedBy).trim()
+  const emptyRows = Math.max(0, EMPTY_ROWS - rows.length)
 
   return (
-    <div className="outslip-letter">
-      <div className="outslip-letter-head">
-        <img src={logo} alt={`${companyInfo.name} logo`} className="outslip-letter-logo" />
-        <div className="outslip-letter-company">
-          <div className="outslip-letter-company-name">
-            <span className="outslip-letter-company-lead">{lead}</span>
-            {rest ? <span className="outslip-letter-company-rest"> {rest}</span> : null}
-          </div>
-          <div className="outslip-letter-company-meta">
-            {address}
-            {address && companyInfo.phone ? '. ' : ''}
-            {companyInfo.phone ? `Tel ${companyInfo.phone}.` : ''}
+    <div className="outslip-form-page">
+      <div className="outslip-form-sheet">
+        <div className="outslip-form-header">
+          <img src={logo} alt="" className="outslip-form-logo" />
+          <div className="outslip-form-company">
+            <div className="outslip-form-company-name">{companyInfo.name}</div>
+            {address ? <div>{address}</div> : null}
+            {companyInfo.phone ? <div>Tel no: {companyInfo.phone}</div> : null}
+            {companyInfo.vatTin ? <div>VAT REG. TIN.: {companyInfo.vatTin}</div> : null}
           </div>
         </div>
-      </div>
 
-      <div className="outslip-letter-date">{formatLetterDate(outslip.date)}</div>
-      <div className="outslip-letter-date">{outslip.id}</div>
-      <TransactionBarcode value={outslip.id} />
+        <div className="outslip-form-title">OUTSLIP</div>
 
-      <p className="outslip-letter-salutation">Sir/Madam:</p>
+        <table className="outslip-form-meta">
+          <tbody>
+            <tr>
+              <th>Outslip No.:</th>
+              <td>{outslip.id}</td>
+            </tr>
+            <tr>
+              <th>Date:</th>
+              <td>{formatLongDate(outslip.date)}</td>
+            </tr>
+            <tr>
+              <th>Customer:</th>
+              <td>{outslip.customer}</td>
+            </tr>
+            <tr>
+              <th>Receiving:</th>
+              <td>{receivingLabel(outslip.receivingId)}</td>
+            </tr>
+            <tr>
+              <th>Status:</th>
+              <td>{outslip.status}</td>
+            </tr>
+          </tbody>
+        </table>
 
-      <p className="outslip-letter-body">
-        We would like to inform that we are going to receive/release items:
-      </p>
+        <table className="outslip-form-items">
+          <colgroup>
+            <col style={{ width: '14%' }} />
+            <col style={{ width: '34%' }} />
+            <col style={{ width: '10%' }} />
+            <col style={{ width: '12%' }} />
+            <col style={{ width: '15%' }} />
+            <col style={{ width: '15%' }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Item Number</th>
+              <th>Item Description</th>
+              <th>QTY.</th>
+              <th>Unit</th>
+              <th>Unit Cost</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((item, index) => {
+              const quantity = item.releasedQuantity > 0 ? item.releasedQuantity : item.poQuantity
+              const description = item.description.trim()
+              const brand = item.brand.trim()
+              const label =
+                brand && description && !description.toLowerCase().includes(brand.toLowerCase())
+                  ? `${brand} ${description}`
+                  : description || brand
+              return (
+                <tr key={item.id}>
+                  <td className="osf-c">{`${index + 1}.0`}</td>
+                  <td className="osf-l">{label}</td>
+                  <td className="osf-c">{quantity}</td>
+                  <td className="osf-c">{item.unit.toUpperCase()}</td>
+                  <td className="osf-r">{formatPrintMoney(item.unitPrice)}</td>
+                  <td className="osf-r">{formatPrintMoney(item.total)}</td>
+                </tr>
+              )
+            })}
+            {Array.from({ length: emptyRows }).map((_, index) => (
+              <tr key={`empty-${index}`} className="outslip-form-empty">
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+                <td>&nbsp;</td>
+              </tr>
+            ))}
+            <tr>
+              <td colSpan={6} className="outslip-form-nothing">
+                ****NOTHING FOLLOWS****
+              </td>
+            </tr>
+          </tbody>
+        </table>
 
-      <ul className="outslip-letter-items">
-        {items.length === 0 ? (
-          <li>
-            <span className="outslip-letter-check" aria-hidden="true" />
-            <span>—</span>
-          </li>
-        ) : (
-          items.map((item) => (
-            <li key={item.id}>
-              <span className="outslip-letter-check" aria-hidden="true" />
-              <span>{itemLine(item)}</span>
-            </li>
-          ))
-        )}
-      </ul>
-
-      <p className="outslip-letter-thanks">Thanks,</p>
-
-      <div className="outslip-letter-signatory">
-        <div className="outslip-letter-signatory-name">{signer ? signer.toUpperCase() : ''}</div>
+        <div className="outslip-form-grand">
+          <span>GRAND TOTAL</span>
+          <span className="outslip-form-grand-amount">
+            {formatPrintMoney(outslip.totalAmount)}
+          </span>
+        </div>
       </div>
     </div>
   )

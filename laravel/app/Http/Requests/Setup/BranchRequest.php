@@ -11,9 +11,10 @@ class BranchRequest extends SetupFormRequest
         $branchId = $this->route('branch');
 
         return [
+            'company_id' => ['required', 'integer', 'exists:companies,id'],
             'name' => ['required', 'string', 'max:255'],
             'code' => [
-                'required',
+                'nullable',
                 'string',
                 'max:50',
                 Rule::unique('branches', 'code')->ignore($branchId),

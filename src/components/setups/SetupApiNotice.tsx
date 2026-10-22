@@ -31,7 +31,7 @@ export function SetupApiNotice() {
 
         if (response.status === 404 && active) {
           setOfflineMessage(
-            'Port 8000 is not serving the ERP Laravel API (setups routes missing). Stop the other process and run: php artisan serve --host=127.0.0.1 --port=8000 from erp-laravel-build.',
+            'This address is not serving the ERP API. Close the other program using the port, then run start-local.bat.',
           )
           return
         }
@@ -58,7 +58,7 @@ export function SetupApiNotice() {
       <p className="font-medium">Unable to connect to Laravel API.</p>
       <p className="mt-1">{offlineMessage}</p>
       <p className="mt-2">
-        Start the ERP Laravel app with: php artisan serve --host=127.0.0.1 --port=8000
+        Start the application with start-local.bat. Leave that window alone while you use the ERP.
       </p>
     </div>
   )

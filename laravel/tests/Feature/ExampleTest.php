@@ -14,6 +14,13 @@ class ExampleTest extends TestCase
     {
         $response = $this->get('/');
 
-        $response->assertStatus(200);
+        if (is_file(public_path('ui/index.html'))) {
+            $response->assertOk();
+
+            return;
+        }
+
+        $response->assertStatus(503);
+        $response->assertSee('start-local.bat');
     }
 }

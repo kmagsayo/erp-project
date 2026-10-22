@@ -8,6 +8,22 @@ import type {
 import type { Quotation } from '@/data/quotationTypes'
 
 const STORAGE_KEY = 'erp-purchase-orders'
+const REMOVE_PO_00002_KEY = 'erp-remove-po-00002-2'
+
+function isPo00002(poNo: unknown) {
+  return String(poNo ?? '').trim().toUpperCase() === 'PO-00002'
+}
+
+function stripPo00002<T extends { poNo?: string }>(rows: T[]): T[] {
+  if (localStorage.getItem(REMOVE_PO_00002_KEY)) return rows
+  return rows.filter((row) => !isPo00002(row.poNo))
+}
+
+function markPo00002Removed(rows: Array<{ poNo?: string }>) {
+  if (localStorage.getItem(REMOVE_PO_00002_KEY)) return
+  if (rows.length === 0 || rows.some((row) => isPo00002(row.poNo))) return
+  localStorage.setItem(REMOVE_PO_00002_KEY, '1')
+}
 
 export function formatCurrency(value: number): string {
   return `₱${value.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
@@ -240,20 +256,25 @@ function normalizePurchaseOrder(row: Partial<PurchaseOrder> & { status?: string 
 export function loadPurchaseOrders(fallback: PurchaseOrder[]): PurchaseOrder[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return fallback.map(normalizePurchaseOrder)
+    if (!raw) return stripPo00002(fallback.map(normalizePurchaseOrder))
     const parsed = JSON.parse(raw) as Array<Partial<PurchaseOrder> & { status?: string }>
     if (!Array.isArray(parsed)) {
-      return fallback.map(normalizePurchaseOrder)
+      return stripPo00002(fallback.map(normalizePurchaseOrder))
     }
     if (parsed.length === 0) return []
-    const normalized = parsed.map((row) => normalizePurchaseOrder(row))
-    const migrated = parsed.some((row, index) => row.status !== normalized[index].status)
+    const stripped = stripPo00002(parsed)
+    const normalized = stripped.map((row) => normalizePurchaseOrder(row))
+    const migrated =
+      stripped.length !== parsed.length ||
+      stripped.some((row, index) => row.status !== normalized[index].status)
     if (migrated) {
       savePurchaseOrders(normalized)
+    } else {
+      markPo00002Removed(normalized)
     }
     return normalized
   } catch {
-    return fallback.map(normalizePurchaseOrder)
+    return stripPo00002(fallback.map(normalizePurchaseOrder))
   }
 }
 
@@ -261,9 +282,14 @@ export function savePurchaseOrders(
   orders: PurchaseOrder[],
   options: { emitEvent?: boolean } = {},
 ) {
-  const serialized = JSON.stringify(orders)
-  if (localStorage.getItem(STORAGE_KEY) === serialized) return
+  const next = stripPo00002(orders)
+  const serialized = JSON.stringify(next)
+  if (localStorage.getItem(STORAGE_KEY) === serialized) {
+    markPo00002Removed(next)
+    return
+  }
   localStorage.setItem(STORAGE_KEY, serialized)
+  markPo00002Removed(next)
   if (options.emitEvent === false) return
   window.dispatchEvent(new Event('erp-purchase-orders-updated'))
 }

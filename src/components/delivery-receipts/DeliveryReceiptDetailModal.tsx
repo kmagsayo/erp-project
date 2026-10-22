@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import type { DeliveryReceipt } from '@/data/erpTypes'
-import { formatDrMoney } from '@/lib/deliveryReceipts'
+import { formatDrMoney, formatReceivedAt } from '@/lib/deliveryReceipts'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
 
@@ -67,7 +66,6 @@ export function DeliveryReceiptDetailModal({
             <h2 id={titleId} className="text-lg font-semibold text-text-primary">
               Delivery Receipt Details
             </h2>
-            <TransactionBarcode value={receipt.id} />
           </div>
           <button
             ref={closeButtonRef}
@@ -96,6 +94,15 @@ export function DeliveryReceiptDetailModal({
               {formatDrMoney(receipt.totalAmount)}
             </span>
           </p>
+          {receipt.status === 'received' ? (
+            <p>
+              <span className="text-text-secondary">Received: </span>
+              <span className="text-text-primary">
+                {receipt.receivedBy || '—'}
+                {receipt.receivedAt ? ` · ${formatReceivedAt(receipt.receivedAt)}` : ''}
+              </span>
+            </p>
+          ) : null}
         </div>
 
         <div className="px-5 pb-5">
@@ -109,7 +116,7 @@ export function DeliveryReceiptDetailModal({
               Mark as Delivered
             </Button>
           ) : null}
-          {receipt.status === 'delivered' ? (
+          {receipt.status === 'delivered' || receipt.status === 'received' ? (
             <Button type="button" onClick={onCreateBilling}>
               Create Billing
             </Button>

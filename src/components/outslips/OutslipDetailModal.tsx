@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -10,6 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { Outslip, OutslipItem } from '@/data/erpTypes'
+import { catalogBrandAndModel, useCatalogItems } from '@/hooks/useCatalogItems'
 import { formatMoney } from '@/lib/outslips'
 import { formatReceivingReference } from '@/lib/receivings'
 import { X } from 'lucide-react'
@@ -61,6 +61,7 @@ export function OutslipDetailModal({
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const catalogItems = useCatalogItems()
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -129,7 +130,6 @@ export function OutslipDetailModal({
                 ? `${outslip.id}${outslip.customer ? ` — ${outslip.customer}` : ''}`
                 : '(New Outslip)'}
             </h2>
-            {outslip.id ? <TransactionBarcode value={outslip.id} /> : null}
             {outslip.receivingId ? (
               <p className="mt-1 text-sm text-text-secondary">
                 Reference: {formatReceivingReference(outslip.receivingId)}
@@ -208,7 +208,6 @@ export function OutslipDetailModal({
                     <TableHead>No.</TableHead>
                     <TableHead>Item Description</TableHead>
                     <TableHead>Brand</TableHead>
-                    <TableHead>Model / Serial No.</TableHead>
                     <TableHead>PO Qty</TableHead>
                     <TableHead>Released Qty</TableHead>
                     <TableHead>Remaining Qty</TableHead>
@@ -218,37 +217,17 @@ export function OutslipDetailModal({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {outslip.items.map((item, index) => (
+                  {outslip.items.map((item, index) => {
+                    const catalog = catalogBrandAndModel(catalogItems, item.itemCode)
+                    const brand = item.brand.trim() || catalog.brand || '—'
+                    return (
                     <TableRow key={item.id}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell>
                         <div>{item.description}</div>
                         <div className="text-xs text-text-secondary">{item.itemCode}</div>
                       </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input
-                            value={item.brand}
-                            onChange={(event) =>
-                              onUpdateItem(index, { brand: event.target.value })
-                            }
-                          />
-                        ) : (
-                          item.brand || '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input
-                            value={item.modelSerialNo}
-                            onChange={(event) =>
-                              onUpdateItem(index, { modelSerialNo: event.target.value })
-                            }
-                          />
-                        ) : (
-                          item.modelSerialNo || '-'
-                        )}
-                      </TableCell>
+                      <TableCell>{brand}</TableCell>
                       <TableCell>{item.poQuantity}</TableCell>
                       <TableCell>
                         {isEditing ? (
@@ -272,7 +251,8 @@ export function OutslipDetailModal({
                       <TableCell>{formatMoney(item.unitPrice)}</TableCell>
                       <TableCell>{formatMoney(item.total)}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>

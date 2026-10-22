@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import type { PurchaseOrder } from '@/data/purchaseOrderTypes'
 import { formatCurrency, formatDisplayDate } from '@/lib/purchaseOrders'
 import { X } from 'lucide-react'
@@ -91,7 +90,6 @@ export function PurchaseOrderDetailModal({
             <h2 id={titleId} className="text-lg font-semibold text-text-primary sm:text-xl">
               Purchase Order Details
             </h2>
-            <TransactionBarcode value={order.poNo} />
           </div>
           <button
             ref={closeButtonRef}

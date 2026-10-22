@@ -2,6 +2,7 @@ import logo from '@/assets/logo.png'
 import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { companyInfo } from '@/data/accomplishmentReports'
 import type { GatePass } from '@/data/erpTypes'
+import { catalogBrandAndModel, useCatalogItems } from '@/hooks/useCatalogItems'
 import { formatDisplayDate } from '@/lib/gatePasses'
 
 function formatTime(value: string) {
@@ -10,6 +11,7 @@ function formatTime(value: string) {
 }
 
 export function GatePassDocument({ gatePass }: { gatePass: GatePass }) {
+  const catalogItems = useCatalogItems()
   return (
     <div className="outslip-document">
       <div className="outslip-head">
@@ -89,25 +91,30 @@ export function GatePassDocument({ gatePass }: { gatePass: GatePass }) {
             <th>No.</th>
             <th>Item Description</th>
             <th>Brand</th>
-            <th>Model / Serial No.</th>
+            <th>Model</th>
             <th>Qty</th>
             <th>Unit</th>
           </tr>
         </thead>
         <tbody>
-          {gatePass.items.map((item, index) => (
+          {gatePass.items.map((item, index) => {
+            const catalog = catalogBrandAndModel(catalogItems, item.itemCode)
+            const brand = item.brand.trim() || catalog.brand || '—'
+            const model = catalog.model || '—'
+            return (
             <tr key={item.id}>
               <td>{index + 1}</td>
               <td>
                 <div>{item.description}</div>
                 <div className="outslip-item-code">{item.itemCode}</div>
               </td>
-              <td>{item.brand || '—'}</td>
-              <td>{item.modelSerialNo || '—'}</td>
+              <td>{brand}</td>
+              <td>{model}</td>
               <td>{item.quantity}</td>
               <td>{item.unit}</td>
             </tr>
-          ))}
+            )
+          })}
         </tbody>
       </table>
 

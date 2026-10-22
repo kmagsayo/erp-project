@@ -1,5 +1,4 @@
 import { ConvertToPoDialog } from '@/components/quotations/ConvertToPoDialog'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,7 +12,7 @@ import {
 import type { Quotation, QuotationStatus } from '@/data/quotationTypes'
 import type { SetupSupplierOption } from '@/hooks/useSetupSuppliers'
 import { formatCurrency } from '@/lib/quotations'
-import { X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 
 const statusBadge = {
@@ -45,7 +44,6 @@ interface QuotationDetailModalProps {
   quotation: Quotation
   onClose: () => void
   onStatusChange: (quotation: Quotation, status: QuotationStatus) => void
-  onPreview: (quotation: Quotation) => void
   onConvertToPo: (quotation: Quotation, supplier: SetupSupplierOption) => void
 }
 
@@ -53,7 +51,6 @@ export function QuotationDetailModal({
   quotation,
   onClose,
   onStatusChange,
-  onPreview,
   onConvertToPo,
 }: QuotationDetailModalProps) {
   const titleId = useId()
@@ -137,7 +134,6 @@ export function QuotationDetailModal({
               <h2 id={titleId} className="text-lg font-semibold text-text-primary sm:text-xl">
                 Quotation Details
               </h2>
-              <TransactionBarcode value={quotation.quotationNo} />
             </div>
             <button
               ref={closeButtonRef}
@@ -218,9 +214,15 @@ export function QuotationDetailModal({
             ) : null}
 
             {isPendingWorkflow ? (
-              <Button type="button" onClick={handleApprove}>
-                Approve
-              </Button>
+              <button
+                type="button"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border text-text-secondary hover:border-success-text hover:bg-success-bg hover:text-success-text"
+                aria-label="Approve"
+                title="Approve"
+                onClick={handleApprove}
+              >
+                <Check className="h-4 w-4" />
+              </button>
             ) : null}
 
             {isRejected ? (
@@ -228,10 +230,6 @@ export function QuotationDetailModal({
                 Pending
               </Button>
             ) : null}
-
-            <Button type="button" variant="secondary" onClick={() => onPreview(quotation)}>
-              Preview
-            </Button>
           </div>
         </div>
       </div>

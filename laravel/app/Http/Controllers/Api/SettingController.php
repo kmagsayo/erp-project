@@ -40,7 +40,7 @@ class SettingController extends Controller
             'user_name' => ['nullable', 'string', 'max:255'],
             'user_email' => ['nullable', 'email', 'max:255'],
             'date_format' => ['required', 'string', 'max:50'],
-            'paper_size' => ['required', 'in:A4,Letter'],
+            'paper_size' => ['required', 'in:A4,Letter,Legal'],
         ]);
 
         $setting = Setting::query()->first();

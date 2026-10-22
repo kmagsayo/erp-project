@@ -12,7 +12,7 @@ class ProjectRequest extends SetupFormRequest
 
         return [
             'project_code' => [
-                'required',
+                'nullable',
                 'string',
                 'max:50',
                 Rule::unique('projects', 'project_code')->ignore($projectId),

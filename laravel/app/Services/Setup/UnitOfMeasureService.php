@@ -3,16 +3,18 @@
 namespace App\Services\Setup;
 
 use App\Models\UnitOfMeasure;
+use App\Services\Setup\Concerns\AllocatesSetupCodes;
 use App\Services\Setup\Concerns\PaginatesSetupQueries;
 use Illuminate\Http\Request;
 
 class UnitOfMeasureService
 {
+    use AllocatesSetupCodes;
     use PaginatesSetupQueries;
 
     public function getUnits(Request $request)
     {
-        $query = UnitOfMeasure::query()->orderBy('name');
+        $query = UnitOfMeasure::query()->orderBy('id');
 
         $this->applySearch($query, $request->query('search'), ['name', 'code', 'symbol']);
         $this->applyStatusFilter($query, $request->query('status'));
@@ -27,11 +29,21 @@ class UnitOfMeasureService
 
     public function createUnit(array $data): UnitOfMeasure
     {
-        return UnitOfMeasure::query()->create($data);
+        unset($data['code']);
+        $unit = UnitOfMeasure::query()->create([
+            ...$data,
+            'code' => 'UOM-TMP-'.uniqid(),
+        ]);
+        $unit->update([
+            'code' => $this->nextSequentialCode('unit_of_measures', 'code', 'UOM-', 3, $unit->id),
+        ]);
+
+        return $unit->fresh();
     }
 
     public function updateUnit(UnitOfMeasure $unit, array $data): UnitOfMeasure
     {
+        unset($data['code']);
         $unit->update($data);
 
         return $unit->fresh();

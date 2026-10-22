@@ -15,7 +15,7 @@ class UserService
     {
         $query = User::query()
             ->with('position')
-            ->orderBy('name');
+            ->orderBy('id');
 
         $this->applySearch($query, $request->query('search'), [
             'username',

@@ -6,7 +6,6 @@ import { OutslipDocument } from '@/components/outslips/OutslipDocument'
 import { OutslipFiltersBar } from '@/components/outslips/OutslipFiltersBar'
 import { OutslipTable } from '@/components/outslips/OutslipTable'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { AddButton } from '@/components/ui/add-button'
 import { Pagination } from '@/components/ui/pagination'
 import { Toast } from '@/components/ui/toast'
 import { useErp } from '@/data/erpStore'
@@ -149,12 +148,6 @@ export function OutslipsPage() {
     setDraft(null)
     setMessage(null)
     setParams({ id: outslip.id }, { replace: true })
-  }
-
-  function openCreate() {
-    setCreatePoId('')
-    setMessage(null)
-    setCreateOpen(true)
   }
 
   function closeCreate() {
@@ -319,7 +312,14 @@ export function OutslipsPage() {
   }
 
   function handlePrint(outslip: Outslip) {
+    const previousTitle = document.title
+    document.title = `${outslip.id}.pdf`
     setPrintOutslip(outslip)
+    const restoreTitle = () => {
+      document.title = previousTitle
+      window.removeEventListener('afterprint', restoreTitle)
+    }
+    window.addEventListener('afterprint', restoreTitle)
     requestAnimationFrame(() => handleOutslipPrint())
   }
 
@@ -374,7 +374,6 @@ export function OutslipsPage() {
           breadcrumb="Transaction / Outslip"
           title="Outslip"
           description="Outgoing stock to customers. Posts inventory OUT on dispatch."
-          action={<AddButton label="New Outslip" onClick={openCreate} />}
         />
 
         <OutslipFiltersBar filters={filters} counts={statusCounts} onChange={setFilters} />

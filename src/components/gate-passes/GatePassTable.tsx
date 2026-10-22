@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/table'
 import type { GatePass } from '@/data/erpTypes'
 import { formatDisplayDate, gatePassStatusLabel } from '@/lib/gatePasses'
-import { Ban, Printer } from 'lucide-react'
+import { Printer } from 'lucide-react'
 
 const statusBadge: Record<GatePass['status'], 'approved' | 'cancelled'> = {
   approved: 'approved',
@@ -20,10 +20,8 @@ const statusBadge: Record<GatePass['status'], 'approved' | 'cancelled'> = {
 interface GatePassTableProps {
   gatePasses: GatePass[]
   selectedId: string | null
-  blockedOutslipIds: Set<string>
   onSelect: (gatePass: GatePass) => void
   onPrint: (gatePass: GatePass) => void
-  onCancel: (gatePass: GatePass) => void
 }
 
 function itemCountLabel(count: number) {
@@ -33,10 +31,8 @@ function itemCountLabel(count: number) {
 export function GatePassTable({
   gatePasses,
   selectedId,
-  blockedOutslipIds,
   onSelect,
   onPrint,
-  onCancel,
 }: GatePassTableProps) {
   if (gatePasses.length === 0) {
     return (
@@ -96,26 +92,6 @@ export function GatePassTable({
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  {gatePass.status === 'approved' ? (
-                    <button
-                      type="button"
-                      className="rounded-md p-2 text-text-secondary hover:bg-error-bg hover:text-error-text disabled:pointer-events-none disabled:opacity-40"
-                      aria-label={
-                        blockedOutslipIds.has(gatePass.outslipId)
-                          ? `Cannot cancel ${gatePass.id} after a Delivery Receipt was created`
-                          : `Cancel ${gatePass.id}`
-                      }
-                      title={
-                        blockedOutslipIds.has(gatePass.outslipId)
-                          ? 'Cannot cancel after a Delivery Receipt has been created.'
-                          : 'Cancel Gate Pass'
-                      }
-                      disabled={blockedOutslipIds.has(gatePass.outslipId)}
-                      onClick={() => onCancel(gatePass)}
-                    >
-                      <Ban className="h-4 w-4" />
-                    </button>
-                  ) : null}
                   <button
                     type="button"
                     className="rounded-md p-2 text-text-secondary hover:bg-maroon-light hover:text-maroon"

@@ -112,8 +112,46 @@ export async function fetchModelsByBrand(brandId: number, search = '') {
   })
 }
 
-export function listCompanies(params: SetupListParams = {}) {
-  return listSetupRecords<CompanySetup>('companies', 'companies', params)
+export async function listCompanies(params: SetupListParams = {}): Promise<SetupListResult<CompanySetup>> {
+  const response = await request<
+    SetupApiResponse<{
+      company?: CompanySetup | null
+      companies?: CompanySetup[]
+      pagination?: PaginationMeta
+    }>
+  >(`/setups/companies${buildQuery(params)}`)
+
+  if (Array.isArray(response.data.companies) && response.data.pagination) {
+    return {
+      items: response.data.companies.map((company) => ({
+        ...company,
+        status: company.status ?? 'active',
+      })),
+      pagination: response.data.pagination,
+    }
+  }
+
+  let items = response.data.company ? [{ ...response.data.company, status: response.data.company.status ?? 'active' }] : []
+  const search = params.search?.trim().toLowerCase()
+  if (search) {
+    items = items.filter((item) =>
+      [item.name, item.address, item.contact_number, item.email, item.registration_information]
+        .some((value) => value?.toLowerCase().includes(search)),
+    )
+  }
+  if (params.status) {
+    items = items.filter((item) => item.status === params.status)
+  }
+
+  return {
+    items,
+    pagination: {
+      current_page: 1,
+      last_page: 1,
+      per_page: params.per_page ?? 15,
+      total: items.length,
+    },
+  }
 }
 
 export function listBranches(params: SetupListParams = {}) {

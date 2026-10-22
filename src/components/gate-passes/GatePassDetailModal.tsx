@@ -1,5 +1,4 @@
 import { Button } from '@/components/ui/button'
-import { TransactionBarcode } from '@/components/ui/transaction-barcode'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
@@ -11,6 +10,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { GatePass } from '@/data/erpTypes'
+import { catalogBrandAndModel, useCatalogItems } from '@/hooks/useCatalogItems'
 import { gatePassStatusLabel } from '@/lib/gatePasses'
 import { X } from 'lucide-react'
 import { useEffect, useId, useRef } from 'react'
@@ -20,8 +20,6 @@ interface GatePassDetailModalProps {
   message: string | null
   existingDeliveryReceiptId: string | null
   onClose: () => void
-  onPrint: () => void
-  onCancel: () => void
   onCreateDeliveryReceipt: () => void
   onViewDeliveryReceipt: (receiptId: string) => void
   onUpdateField: <K extends keyof GatePass>(key: K, value: GatePass[K]) => void
@@ -32,8 +30,6 @@ export function GatePassDetailModal({
   message,
   existingDeliveryReceiptId,
   onClose,
-  onPrint,
-  onCancel,
   onCreateDeliveryReceipt,
   onViewDeliveryReceipt,
   onUpdateField,
@@ -41,6 +37,7 @@ export function GatePassDetailModal({
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+  const catalogItems = useCatalogItems()
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -113,7 +110,6 @@ export function GatePassDetailModal({
               </Badge>
             </h2>
             <p className="mt-1 text-sm text-text-secondary">Outslip: {gatePass.outslipId}</p>
-            <TransactionBarcode value={gatePass.id} />
           </div>
           <button
             ref={closeButtonRef}
@@ -176,36 +172,6 @@ export function GatePassDetailModal({
                   onChange={(event) => onUpdateField('destination', event.target.value)}
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">
-                  Driver
-                </label>
-                <Input
-                  value={gatePass.driverName}
-                  disabled={!canEdit}
-                  onChange={(event) => onUpdateField('driverName', event.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">
-                  Plate No
-                </label>
-                <Input
-                  value={gatePass.plateNo}
-                  disabled={!canEdit}
-                  onChange={(event) => onUpdateField('plateNo', event.target.value)}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">
-                  Vehicle
-                </label>
-                <Input
-                  value={gatePass.vehicle}
-                  disabled={!canEdit}
-                  onChange={(event) => onUpdateField('vehicle', event.target.value)}
-                />
-              </div>
             </div>
           </section>
 
@@ -218,25 +184,30 @@ export function GatePassDetailModal({
                     <TableHead>No.</TableHead>
                     <TableHead>Item Description</TableHead>
                     <TableHead>Brand</TableHead>
-                    <TableHead>Model / Serial No.</TableHead>
+                    <TableHead>Model</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Unit</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {gatePass.items.map((item, index) => (
+                  {gatePass.items.map((item, index) => {
+                    const catalog = catalogBrandAndModel(catalogItems, item.itemCode)
+                    const brand = item.brand.trim() || catalog.brand || '—'
+                    const model = catalog.model || '—'
+                    return (
                     <TableRow key={item.id}>
                       <TableCell>{index + 1}</TableCell>
                       <TableCell>
                         <div>{item.description}</div>
                         <div className="text-xs text-text-secondary">{item.itemCode}</div>
                       </TableCell>
-                      <TableCell>{item.brand || '—'}</TableCell>
-                      <TableCell>{item.modelSerialNo || '—'}</TableCell>
+                      <TableCell>{brand}</TableCell>
+                      <TableCell>{model}</TableCell>
                       <TableCell>{item.quantity}</TableCell>
                       <TableCell>{item.unit}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -255,28 +226,10 @@ export function GatePassDetailModal({
           {message ? <p className="mt-4 text-sm text-text-secondary">{message}</p> : null}
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-border px-5 py-4 sm:px-6">
-          <Button type="button" variant="secondary" onClick={onPrint}>
-            Print Gate Pass
-          </Button>
-          {gatePass.status === 'approved' ? (
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={Boolean(existingDeliveryReceiptId)}
-              title={
-                existingDeliveryReceiptId
-                  ? 'Cannot cancel after a Delivery Receipt has been created.'
-                  : undefined
-              }
-              onClick={onCancel}
-            >
-              Cancel Gate Pass
-            </Button>
-          ) : null}
-          {gatePass.status === 'approved' ? (
-            existingDeliveryReceiptId ? (
-              <div className="ml-auto text-right text-sm">
+        {gatePass.status === 'approved' ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-3 border-t border-border px-5 py-4 sm:px-6">
+            {existingDeliveryReceiptId ? (
+              <div className="text-right text-sm">
                 <p className="font-medium text-text-primary">Delivery Receipt Already Created</p>
                 <button
                   type="button"
@@ -287,12 +240,12 @@ export function GatePassDetailModal({
                 </button>
               </div>
             ) : (
-              <Button type="button" className="ml-auto" onClick={onCreateDeliveryReceipt}>
+              <Button type="button" onClick={onCreateDeliveryReceipt}>
                 Create Delivery Receipt
               </Button>
-            )
-          ) : null}
-        </div>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   )

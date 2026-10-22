@@ -24,8 +24,9 @@ import {
   updateSetupRecord,
 } from '@/lib/setupsApi'
 import { cn } from '@/lib/utils'
-import { Pencil, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ChevronDown, Pencil, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 interface SelectOption {
   value: string
@@ -39,27 +40,129 @@ interface SetupResourcePageProps<T extends { id: number }> {
 function FieldSelect({
   value,
   onChange,
-  children,
+  options,
+  placeholder,
   disabled,
 }: {
   value: string
   onChange: (value: string) => void
-  children: React.ReactNode
+  options: SelectOption[]
+  placeholder?: string
   disabled?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLUListElement>(null)
+  const [box, setBox] = useState({ top: 0, left: 0, width: 0, maxHeight: 224 })
+  const selected = options.find((option) => option.value === value)
+
+  const place = useCallback(() => {
+    const rect = buttonRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const spaceBelow = window.innerHeight - rect.bottom - 8
+    const spaceAbove = rect.top - 8
+    const openUp = spaceBelow < 180 && spaceAbove > spaceBelow
+    const maxHeight = Math.max(120, Math.min(224, openUp ? spaceAbove : spaceBelow))
+    setBox({
+      top: openUp ? rect.top - 4 - maxHeight : rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      maxHeight,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    place()
+
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as Node
+      if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+
+    window.addEventListener('mousedown', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [open, place])
+
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-      className={cn(
-        'flex h-9 w-full rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary',
-        'focus-visible:outline-none focus-visible:border-maroon focus-visible:ring-2 focus-visible:ring-maroon-light',
-        'disabled:cursor-not-allowed disabled:opacity-50',
-      )}
-    >
-      {children}
-    </select>
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          'flex h-9 w-full items-center justify-between gap-2 rounded-md border border-border-input bg-surface px-3 py-1 text-left text-sm',
+          'focus-visible:outline-none focus-visible:border-maroon focus-visible:ring-2 focus-visible:ring-maroon-light',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+        )}
+      >
+        <span className={cn('truncate', selected ? 'text-text-primary' : 'text-text-secondary')}>
+          {selected?.label ?? placeholder ?? 'Select'}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 text-text-secondary" />
+      </button>
+      {open && !disabled
+        ? createPortal(
+            <ul
+              ref={menuRef}
+              role="listbox"
+              style={{ top: box.top, left: box.left, width: box.width, maxHeight: box.maxHeight }}
+              className="fixed z-[80] overflow-auto rounded-md border border-border bg-surface py-1 shadow-lg"
+            >
+              {placeholder ? (
+                <li>
+                  <button
+                    type="button"
+                    className="flex w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-maroon-light"
+                    onClick={() => {
+                      onChange('')
+                      setOpen(false)
+                    }}
+                  >
+                    {placeholder}
+                  </button>
+                </li>
+              ) : null}
+              {options.map((option) => (
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === value}
+                    className={cn(
+                      'flex w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-maroon-light',
+                      option.value === value && 'bg-maroon-light',
+                    )}
+                    onClick={() => {
+                      onChange(option.value)
+                      setOpen(false)
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                </li>
+              ))}
+            </ul>,
+            document.body,
+          )
+        : null}
+    </>
   )
 }
 
@@ -293,10 +396,14 @@ export function SetupResourcePage<T extends { id: number }>({
 
     if (field.type === 'status') {
       return (
-        <FieldSelect value={value} onChange={(next) => updateField(field.name, next)}>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-        </FieldSelect>
+        <FieldSelect
+          value={value}
+          onChange={(next) => updateField(field.name, next)}
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+          ]}
+        />
       )
     }
 
@@ -314,15 +421,10 @@ export function SetupResourcePage<T extends { id: number }>({
         <FieldSelect
           value={value}
           onChange={(next) => updateField(field.name, next)}
+          options={options}
+          placeholder={`Select ${field.label}`}
           disabled={field.dependsOn === 'brand_id' && !form.brand_id}
-        >
-          <option value="">Select {field.label}</option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </FieldSelect>
+        />
       )
     }
 
@@ -382,15 +484,16 @@ export function SetupResourcePage<T extends { id: number }>({
         <FormField label="Status">
           <FieldSelect
             value={statusFilter}
+            placeholder="All Status"
             onChange={(value) => {
               setStatusFilter(value)
               setPage(1)
             }}
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </FieldSelect>
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+            ]}
+          />
         </FormField>
       </div>
 

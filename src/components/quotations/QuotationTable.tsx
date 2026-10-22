@@ -1,5 +1,4 @@
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -16,7 +15,7 @@ import type {
 } from '@/data/quotationTypes'
 import { formatCurrency, formatDisplayDate } from '@/lib/quotations'
 import { cn } from '@/lib/utils'
-import { Pencil, Printer, Trash2 } from 'lucide-react'
+import { Check, Pencil, Printer, Trash2 } from 'lucide-react'
 
 const statusBadge = {
   approved: 'approved' as const,
@@ -169,13 +168,15 @@ export function QuotationTable({
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-1">
                     {quotation.status === 'pending' || quotation.status === 'draft' ? (
-                      <Button
+                      <button
                         type="button"
-                        size="sm"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border text-text-secondary hover:border-success-text hover:bg-success-bg hover:text-success-text"
+                        aria-label={`Approve ${quotation.quotationNo}`}
+                        title="Approve"
                         onClick={() => onApprove(quotation)}
                       >
-                        Approve
-                      </Button>
+                        <Check className="h-4 w-4" />
+                      </button>
                     ) : null}
                     <button
                       type="button"

@@ -6,7 +6,6 @@ import { QuotationFormModal } from '@/components/quotations/QuotationFormModal'
 import { QuotationTable } from '@/components/quotations/QuotationTable'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { AddButton } from '@/components/ui/add-button'
-import { Button } from '@/components/ui/button'
 import { Pagination } from '@/components/ui/pagination'
 import { Toast } from '@/components/ui/toast'
 import type {
@@ -38,8 +37,6 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
-type Screen = 'list' | 'preview'
-
 const PAGE_SIZE = 10
 const QUOTATIONS_LIST_PATH = '/quotations'
 const QUOTATIONS_CREATE_PATH = '/quotations/create'
@@ -64,7 +61,6 @@ export function QuotationsPage() {
   const [quotations, setQuotations] = useState<Quotation[]>(() =>
     loadQuotations(initialQuotations),
   )
-  const [screen, setScreen] = useState<Screen>('list')
   const [filters, setFilters] = useState<QuotationFilters>(defaultFilters)
   const [sortField, setSortField] = useState<QuotationSortField>('date')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
@@ -103,7 +99,6 @@ export function QuotationsPage() {
       if (!wasCreatingRef.current) {
         setSelectedId(null)
         setDetailId(null)
-        setScreen('list')
         setEditorMode('create')
         setDraft((current) => current ?? createEmptyQuotation(generateQuotationNo(quotations)))
       }
@@ -171,7 +166,6 @@ export function QuotationsPage() {
   function openCreate() {
     setSelectedId(null)
     setDetailId(null)
-    setScreen('list')
     setEditorMode('create')
     setDraft(createEmptyQuotation(generateQuotationNo(quotations)))
     navigate(QUOTATIONS_CREATE_PATH)
@@ -189,7 +183,6 @@ export function QuotationsPage() {
     setDetailId(null)
     setEditorMode('edit')
     setDraft(structuredClone(quotation))
-    setScreen('list')
     setSelectedId(quotation.id)
     if (creating) {
       navigate(QUOTATIONS_LIST_PATH, { replace: true })
@@ -203,21 +196,6 @@ export function QuotationsPage() {
 
   function closeDetail() {
     setDetailId(null)
-  }
-
-  function returnToList() {
-    setDraft(null)
-    setEditorMode(null)
-    setSelectedId(null)
-    setDetailId(null)
-    setScreen('list')
-    if (creating) {
-      navigate(QUOTATIONS_LIST_PATH, { replace: true })
-      return
-    }
-    if (location.pathname.replace(/\/$/, '') !== QUOTATIONS_LIST_PATH) {
-      navigate(QUOTATIONS_LIST_PATH)
-    }
   }
 
   function handleSave() {
@@ -250,7 +228,6 @@ export function QuotationsPage() {
     setSelectedId(next.id)
     setDraft(null)
     setEditorMode(null)
-    setScreen('list')
     setToast(
       exists ? `Quotation ${next.quotationNo} updated.` : `Quotation ${next.quotationNo} created.`,
     )
@@ -270,21 +247,12 @@ export function QuotationsPage() {
       setDetailId(null)
     }
     setDeleteTarget(null)
-    setScreen('list')
     setToast(`Quotation ${deletedNo} deleted.`)
   }
 
   function handlePrint(quotation: Quotation) {
     setPrintQuotation(quotation)
     requestAnimationFrame(() => handleQuotationPrint())
-  }
-
-  function openPreview(quotation: Quotation) {
-    setDetailId(null)
-    setEditorMode(null)
-    setDraft(structuredClone(quotation))
-    setSelectedId(quotation.id)
-    setScreen('preview')
   }
 
   function handleConvertToPo(
@@ -345,36 +313,6 @@ export function QuotationsPage() {
     setToast(`Quotation ${quotation.quotationNo} ${label}.`)
   }
 
-  if (screen === 'preview' && draft) {
-    return (
-      <div>
-        <div className="no-print">
-          {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
-          <PageHeader
-            title="Quotation Preview"
-            description={`Preview ${draft.quotationNo} before printing.`}
-            action={
-              <div className="flex gap-2">
-                <Button type="button" variant="secondary" onClick={returnToList}>
-                  Back to List
-                </Button>
-                <Button type="button" onClick={() => handlePrint(draft)}>
-                  Print
-                </Button>
-              </div>
-            }
-          />
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <QuotationDocument quotation={draft} />
-          </div>
-        </div>
-        <div className="quotation-print-root">
-          <QuotationDocument quotation={draft} />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div>
       <div className="no-print">
@@ -424,7 +362,6 @@ export function QuotationsPage() {
             quotation={detailQuotation}
             onClose={closeDetail}
             onStatusChange={handleStatusChange}
-            onPreview={openPreview}
             onConvertToPo={handleConvertToPo}
           />
         ) : null}
