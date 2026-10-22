@@ -11,6 +11,7 @@ const DOCUMENT_KEYS = [
   'erp-billings-v2',
   'erp-accomplishments',
   'erp-notification-read',
+  'erp-inventory-movements',
 ]
 
 const DOCUMENT_EVENTS = [

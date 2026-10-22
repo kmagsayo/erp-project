@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:local": "tsc -b && vite build --base /ui/ --outDir laravel/public/ui --emptyOutDir",
+    "build:local": "tsc -b && vite build --base /ui/ --outDir ../backend/public/ui --emptyOutDir",
     "lint": "oxlint",
     "preview": "vite preview"
   },

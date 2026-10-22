@@ -1,7 +1,8 @@
 $ErrorActionPreference = 'Continue'
 
 $script:AppRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:LaravelRoot = Join-Path $AppRoot 'laravel'
+$script:FrontendRoot = Join-Path $AppRoot 'frontend'
+$script:LaravelRoot = Join-Path $AppRoot 'backend'
 $script:LogDir = Join-Path $AppRoot 'logs'
 $script:StateDir = Join-Path $AppRoot '.local'
 $script:PidFile = Join-Path $StateDir 'server.pid'

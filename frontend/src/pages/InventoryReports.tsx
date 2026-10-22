@@ -2,7 +2,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { AddButton } from '@/components/ui/add-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
+import { FormField, Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -13,14 +13,54 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { getStockLevels, useErp } from '@/data/erpStore'
-import { useMemo, useState } from 'react'
+import type { MovementType } from '@/data/erpTypes'
+import type { ItemSetup } from '@/data/setupTypes'
+import { listAllItems } from '@/lib/setupsApi'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+const selectClassName =
+  'flex h-9 w-full rounded-md border border-border-input bg-surface px-3 py-1 text-sm text-text-primary focus-visible:border-maroon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-maroon-light'
+
+function todayIsoDate() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
 export function InventoryReportsPage() {
-  const { movements, outslips, gatePasses, createDeliveryReceiptFromOutslip } = useErp()
+  const { movements, outslips, gatePasses, createDeliveryReceiptFromOutslip, addInventoryMovement } =
+    useErp()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState<string | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
+  const [items, setItems] = useState<ItemSetup[]>([])
+  const [itemsError, setItemsError] = useState<string | null>(null)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [form, setForm] = useState({
+    itemId: '',
+    quantity: '',
+    movementType: 'STOCK IN' as MovementType,
+    date: todayIsoDate(),
+    warehouse: 'Main Warehouse',
+  })
+
+  useEffect(() => {
+    if (!formOpen) return
+    let cancelled = false
+    listAllItems({ status: 'active' })
+      .then((rows) => {
+        if (!cancelled) setItems(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setItemsError('Could not load items from setup.')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [formOpen])
 
   const stock = getStockLevels(movements)
   const totalQuantity = stock.reduce((sum, row) => sum + row.quantity, 0)
@@ -44,6 +84,45 @@ export function InventoryReportsPage() {
     })
   }, [movements, query])
 
+  function openAdd() {
+    setForm({
+      itemId: '',
+      quantity: '',
+      movementType: 'STOCK IN',
+      date: todayIsoDate(),
+      warehouse: 'Main Warehouse',
+    })
+    setFormError(null)
+    setItemsError(null)
+    setFormOpen(true)
+  }
+
+  function handleAdd(event: FormEvent) {
+    event.preventDefault()
+    const item = items.find((row) => String(row.id) === form.itemId)
+    if (!item) {
+      setFormError('Select an item.')
+      return
+    }
+    const result = addInventoryMovement({
+      item: item.display_name || item.item_name,
+      itemCode: item.item_code,
+      unit: item.unit_of_measure?.name || 'pc',
+      quantity: Number(form.quantity),
+      movementType: form.movementType,
+      date: form.date,
+      warehouse: form.warehouse,
+    })
+    if (result.error) {
+      setFormError(result.error)
+      return
+    }
+    setFormOpen(false)
+    setMessage(
+      `${form.movementType === 'STOCK IN' ? 'Stock in' : 'Stock out'} saved for ${item.display_name || item.item_name}.`,
+    )
+  }
+
   function handleCreateDeliveryReceipt(outslipId: string) {
     if (outslipId === '—') return
     const result = createDeliveryReceiptFromOutslip(outslipId)
@@ -59,7 +138,7 @@ export function InventoryReportsPage() {
       <PageHeader
         title="Inventory & Reports"
         description="Current stock and inventory records from released outslips, on one page."
-        action={<AddButton label="Add Inventory" />}
+        action={<AddButton label="Add Inventory" onClick={openAdd} />}
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -145,6 +224,9 @@ export function InventoryReportsPage() {
                 </TableCell>
                 <TableCell>
                   {row.quantity} {row.unit}
+                  <div className="text-xs text-text-secondary">
+                    {row.movementType === 'STOCK IN' ? 'Stock in' : 'Stock out'}
+                  </div>
                 </TableCell>
                 <TableCell>{row.warehouse}</TableCell>
                 <TableCell>{row.project}</TableCell>
@@ -196,6 +278,89 @@ export function InventoryReportsPage() {
       </Table>
 
       {message && <p className="mt-3 text-sm text-text-secondary">{message}</p>}
+
+      {formOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-lg border border-border bg-surface p-6 shadow-lg">
+            <h2 className="text-lg font-semibold text-text-primary">Add Inventory</h2>
+            <form className="mt-4 space-y-3" onSubmit={handleAdd}>
+              <FormField label="Item">
+                <select
+                  required
+                  value={form.itemId}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, itemId: event.target.value }))
+                  }
+                  className={selectClassName}
+                >
+                  <option value="">Select item</option>
+                  {items.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.item_code} — {item.display_name || item.item_name}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+              <FormField label="Type">
+                <select
+                  value={form.movementType}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      movementType: event.target.value as MovementType,
+                    }))
+                  }
+                  className={selectClassName}
+                >
+                  <option value="STOCK IN">Stock in</option>
+                  <option value="STOCK OUT">Stock out</option>
+                </select>
+              </FormField>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormField label="Quantity">
+                  <Input
+                    required
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={form.quantity}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, quantity: event.target.value }))
+                    }
+                  />
+                </FormField>
+                <FormField label="Date">
+                  <Input
+                    required
+                    type="date"
+                    value={form.date}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, date: event.target.value }))
+                    }
+                  />
+                </FormField>
+              </div>
+              <FormField label="Warehouse">
+                <Input
+                  required
+                  value={form.warehouse}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, warehouse: event.target.value }))
+                  }
+                />
+              </FormField>
+              {itemsError ? <p className="text-sm text-error-text">{itemsError}</p> : null}
+              {formError ? <p className="text-sm text-error-text">{formError}</p> : null}
+              <div className="flex justify-end gap-3 pt-2">
+                <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

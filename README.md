@@ -57,13 +57,22 @@ XAMPP’s PHP 8.0 remains installed and is not used by this application. Laravel
 
 A current Google Chrome or Microsoft Edge is enough to use the system. Firefox, Brave, and Opera work with the same address when they are installed. Firefox is not currently installed on this PC.
 
+## Project folders
+
+| Folder | What is in it |
+| --- | --- |
+| `frontend` | React screens, components, and the Vite app |
+| `backend` | Laravel API, database, and setup records |
+
+Start and stop scripts stay in this folder.
+
 ## Where data is stored
 
 | Data | Location |
 | --- | --- |
-| Database | `laravel\database\database.sqlite` |
-| Uploaded files | `laravel\storage\app\public` |
-| Application log | `laravel\storage\logs\laravel.log` |
+| Database | `backend\database\database.sqlite` |
+| Uploaded files | `backend\storage\app\public` |
+| Application log | `backend\storage\logs\laravel.log` |
 | Startup and server logs | `logs\startup.log`, `logs\server.out.log`, `logs\server.err.log` |
 | Backups | `backups\` |
 
@@ -87,7 +96,7 @@ The restore command asks you to type `RESTORE`. Each backup contains the SQLite 
 ## Change the port
 
 1. Stop the application with `stop-local.bat`.
-2. Edit `APP_PORT` and `APP_URL` together in `laravel\.env`.
+2. Edit `APP_PORT` and `APP_URL` together in `backend\.env`.
 3. Start the application again.
 
 Example:
@@ -119,9 +128,10 @@ XAMPP MySQL is running on this computer, but this ERP does not use it. There was
 
 ## For development
 
-The local launcher serves a built interface and the Laravel API on one port. To work on the React screens with live reload, start the local server first, then in this folder run:
+The local launcher serves a built interface and the Laravel API on one port. To work on the React screens with live reload, start the local server first, then in the `frontend` folder run:
 
 ```bat
+cd frontend
 npm run dev
 ```
 
@@ -130,9 +140,9 @@ That development screen is `http://127.0.0.1:5173` and forwards API calls to por
 Automated checks:
 
 ```bat
-cd laravel
+cd backend
 C:\Users\Kristian\Documents\RTS\.tools\php\php.exe artisan test
-cd ..
+cd ..\frontend
 npx playwright test
 ```
 

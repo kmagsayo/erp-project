@@ -11,6 +11,7 @@ import type {
   DeliveryReceiptStatus,
   GatePass,
   InventoryMovement,
+  MovementType,
   Outslip,
   OutslipStatus,
   Receiving,
@@ -49,6 +50,10 @@ import {
   loadGatePasses,
   saveGatePasses,
 } from '@/lib/gatePasses'
+import {
+  loadInventoryMovements,
+  saveInventoryMovements,
+} from '@/lib/inventoryMovements'
 import { resetExampleDocuments } from '@/lib/resetExampleDocuments'
 import { syncAccomplishmentReportsFromDeliveryReceipts } from '@/lib/accomplishmentReports'
 
@@ -108,9 +113,16 @@ interface ErpStore {
   ) => { receipt?: DeliveryReceipt; error?: string; already?: boolean }
   createGatePassFromOutslip: (outslipId: string) => { gatePass?: GatePass; error?: string }
   updateGatePass: (gatePass: GatePass) => { gatePass?: GatePass; error?: string }
+  addInventoryMovement: (input: {
+    item: string
+    itemCode: string
+    unit: string
+    quantity: number
+    movementType: MovementType
+    date: string
+    warehouse: string
+  }) => { error?: string }
 }
-
-const initialMovements: InventoryMovement[] = []
 
 const ErpContext = createContext<ErpStore | null>(null)
 
@@ -130,7 +142,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     return loadPurchaseOrders(initialPurchaseOrders)
   })
   const [receivings, setReceivings] = useState<Receiving[]>(() => loadReceivings([]))
-  const [movements, setMovements] = useState(initialMovements)
+  const [movements, setMovements] = useState<InventoryMovement[]>(() => loadInventoryMovements())
   const [deliveryReceipts, setDeliveryReceipts] = useState<DeliveryReceipt[]>(() => {
     undoDeliveryItemScanTest()
     return loadDeliveryReceipts([])
@@ -381,7 +393,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         }))
         .filter((row) => row.quantity > 0)
 
-      setMovements((current) => [...current, ...newRows])
+      appendMovements(newRows)
     }
 
     function persistCompletedReceiving(next: Receiving, userName: string) {
@@ -529,7 +541,62 @@ export function ErpProvider({ children }: { children: ReactNode }) {
         processedBy,
       })).filter((row) => row.quantity > 0)
 
-      setMovements((current) => [...current, ...newRows])
+      appendMovements(newRows)
+    }
+
+    function appendMovements(rows: InventoryMovement[]) {
+      if (rows.length === 0) return
+      setMovements((current) => {
+        const next = [...current, ...rows]
+        saveInventoryMovements(next)
+        return next
+      })
+    }
+
+    function addInventoryMovement(input: {
+      item: string
+      itemCode: string
+      unit: string
+      quantity: number
+      movementType: MovementType
+      date: string
+      warehouse: string
+    }) {
+      const quantity = Number(input.quantity)
+      if (!input.itemCode.trim() || !input.item.trim()) {
+        return { error: 'Select an item.' }
+      }
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return { error: 'Enter a quantity greater than zero.' }
+      }
+      if (!input.date) return { error: 'Enter a date.' }
+
+      if (input.movementType === 'STOCK OUT') {
+        const onHand =
+          getStockLevels(movements).find((row) => row.itemCode === input.itemCode)?.quantity ?? 0
+        if (quantity > onHand) {
+          return { error: `Only ${onHand} ${input.unit} on hand for ${input.item}.` }
+        }
+      }
+
+      const movement: InventoryMovement = {
+        id: nextId('IM', movements.map((row) => row.id)),
+        date: input.date,
+        item: input.item.trim(),
+        itemCode: input.itemCode.trim(),
+        quantity,
+        unit: input.unit.trim() || 'pc',
+        movementType: input.movementType,
+        warehouse: input.warehouse.trim() || 'Main Warehouse',
+        destination: input.warehouse.trim() || 'Main Warehouse',
+        project: '—',
+        customer: '—',
+        poId: '—',
+        outslipId: '—',
+        processedBy: 'Admin',
+      }
+      appendMovements([movement])
+      return {}
     }
 
     function updateOutslipStatus(
@@ -813,6 +880,7 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       confirmDeliveryReceiptReceived,
       createGatePassFromOutslip,
       updateGatePass,
+      addInventoryMovement,
     }
   }, [purchaseOrders, outslips, receivings, movements, deliveryReceipts, gatePasses])
 

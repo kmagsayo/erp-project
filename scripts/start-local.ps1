@@ -107,12 +107,12 @@ try {
             Exit-Script 1
         }
         Copy-Item $example $envFile
-        Write-Info 'Created laravel\.env from .env.example. Existing environment files are not overwritten.'
+        Write-Info 'Created backend\.env from .env.example. Existing environment files are not overwritten.'
     }
 
     $port = Get-AppPort
     if ($port -lt 1 -or $port -gt 65535) {
-        Write-Fail "APP_PORT in laravel\.env is not a valid port."
+        Write-Fail "APP_PORT in backend\.env is not a valid port."
         Exit-Script 1
     }
 
@@ -146,9 +146,9 @@ try {
         }
     }
 
-    if (-not (Test-Path (Join-Path $AppRoot 'node_modules'))) {
+    if (-not (Test-Path (Join-Path $FrontendRoot 'node_modules'))) {
         Write-Info 'Installing frontend dependencies. This needs internet access once.'
-        Push-Location $AppRoot
+        Push-Location $FrontendRoot
         & npm.cmd ci
         $npmCode = $LASTEXITCODE
         Pop-Location
@@ -163,11 +163,11 @@ try {
     if (-not $needsBuild) {
         $builtAt = (Get-Item $uiIndex).LastWriteTimeUtc
         $inputs = @(
-            (Join-Path $AppRoot 'src'),
-            (Join-Path $AppRoot 'public'),
-            (Join-Path $AppRoot 'index.html'),
-            (Join-Path $AppRoot 'package.json'),
-            (Join-Path $AppRoot 'vite.config.ts')
+            (Join-Path $FrontendRoot 'src'),
+            (Join-Path $FrontendRoot 'public'),
+            (Join-Path $FrontendRoot 'index.html'),
+            (Join-Path $FrontendRoot 'package.json'),
+            (Join-Path $FrontendRoot 'vite.config.ts')
         )
         foreach ($inputPath in $inputs) {
             if (-not (Test-Path $inputPath)) {
@@ -193,7 +193,7 @@ try {
 
     if ($needsBuild) {
         Write-Info 'Building the local interface.'
-        Push-Location $AppRoot
+        Push-Location $FrontendRoot
         & npm.cmd run build:local
         $buildCode = $LASTEXITCODE
         Pop-Location
@@ -226,7 +226,7 @@ try {
     }
     Pop-Location
     if ($migrateCode -ne 0) {
-        Write-Fail 'Database setup failed. See the messages above and logs\laravel.log.'
+        Write-Fail 'Database setup failed. See the messages above and backend\storage\logs\laravel.log.'
         Exit-Script $migrateCode
     }
 
@@ -258,12 +258,12 @@ try {
             } else {
                 Write-Fail "Port $port is already in use, and it is not a healthy ERP server."
                 Write-Fail "Listening process id: $($listeners -join ', ')"
-                Write-Fail 'Stop that program or change APP_PORT in laravel\.env, then run start-local.bat again.'
+                Write-Fail 'Stop that program or change APP_PORT in backend\.env, then run start-local.bat again.'
                 Exit-Script 1
             }
         } catch {
             Write-Fail "Port $port is already in use by process id $($listeners -join ', ')."
-            Write-Fail 'Stop that program or change APP_PORT in laravel\.env, then run start-local.bat again.'
+            Write-Fail 'Stop that program or change APP_PORT in backend\.env, then run start-local.bat again.'
             Exit-Script 1
         }
     } else {
