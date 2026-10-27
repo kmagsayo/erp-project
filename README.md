@@ -70,7 +70,7 @@ Start and stop scripts stay in this folder.
 
 | Data | Location |
 | --- | --- |
-| Database | `backend\database\database.sqlite` |
+| Database | MariaDB database `rts_system` (SQL dump: `backend\database\rts_system.sql`) |
 | Uploaded files | `backend\storage\app\public` |
 | Application log | `backend\storage\logs\laravel.log` |
 | Startup and server logs | `logs\startup.log`, `logs\server.out.log`, `logs\server.err.log` |

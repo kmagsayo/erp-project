@@ -3,6 +3,7 @@ import { SoaDocument } from '@/components/soa/SoaDocument'
 import { SoaLedger } from '@/components/soa/SoaLedger'
 import { Button } from '@/components/ui/button'
 import { FormField, Input } from '@/components/ui/input'
+import { Toast } from '@/components/ui/toast'
 import type { Billing } from '@/data/billingTypes'
 import type { SoaLine } from '@/data/soaTypes'
 import { useSetupCustomers } from '@/hooks/useSetupCustomers'
@@ -11,8 +12,11 @@ import { listActiveBillings } from '@/lib/billingsApi'
 import { buildSoaFromBillings, buildSoaPrintDocument, formatSoaPrintMoney } from '@/lib/soa'
 import { useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 export function StatementOfAccountPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const customers = useSetupCustomers()
   const [localBillings, setLocalBillings] = useState<Billing[]>(() => loadBillings(initialBillings))
   const [activeBillings, setActiveBillings] = useState<Billing[]>([])
@@ -28,6 +32,7 @@ export function StatementOfAccountPage() {
   const [searched, setSearched] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
   const [printBillingId, setPrintBillingId] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   useEffect(() => {
     function refresh() {
@@ -50,6 +55,45 @@ export function StatementOfAccountPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!toast) return
+    const timer = window.setTimeout(() => setToast(null), 4000)
+    return () => window.clearTimeout(timer)
+  }, [toast])
+
+  useEffect(() => {
+    const state = location.state as {
+      toast?: string
+      customerId?: string
+      customerName?: string
+      deliveryReceiptId?: string
+      continueWorkflow?: boolean
+    } | null
+    if (!state?.customerId && !state?.continueWorkflow && !state?.toast) return
+
+    if (state.toast) setToast(state.toast)
+    if (state.customerId) {
+      setCustomerId(state.customerId)
+      setSearched(true)
+      setSearchError(null)
+    }
+
+    if (state.continueWorkflow) {
+      const deliveryReceiptId = state.deliveryReceiptId?.trim() || ''
+      const timer = window.setTimeout(() => {
+        navigate(
+          deliveryReceiptId
+            ? `/accomplishments?dr=${encodeURIComponent(deliveryReceiptId)}`
+            : '/accomplishments',
+          { replace: true },
+        )
+      }, 900)
+      return () => window.clearTimeout(timer)
+    }
+
+    navigate('.', { replace: true, state: null })
+  }, [location.state, navigate])
 
   const billings = useMemo(() => {
     const localIds = new Set(localBillings.map((row) => row.id))
@@ -134,6 +178,7 @@ export function StatementOfAccountPage() {
   return (
     <div>
       <div className="no-print">
+        {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
         <PageHeader title="Statement of Account" />
 
         <div className="rounded-lg border border-border bg-surface px-5 py-5">

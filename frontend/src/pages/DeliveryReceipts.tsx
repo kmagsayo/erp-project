@@ -278,6 +278,10 @@ export function DeliveryReceiptsPage() {
       state: {
         toast: `Billing ${billing.billingNo} created successfully.`,
         highlightId: billing.id,
+        continueWorkflow: true,
+        customerId: matchedCustomer?.id || `name:${detailReceipt.customer}`,
+        customerName: detailReceipt.customer,
+        deliveryReceiptId: detailReceipt.id,
       },
     })
   }

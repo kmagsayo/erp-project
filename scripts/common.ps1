@@ -7,7 +7,85 @@ $script:LogDir = Join-Path $AppRoot 'logs'
 $script:StateDir = Join-Path $AppRoot '.local'
 $script:PidFile = Join-Path $StateDir 'server.pid'
 $script:SchedulerPidFile = Join-Path $StateDir 'scheduler.pid'
+$script:MariaDbPidFile = Join-Path $StateDir 'mariadb.pid'
 $script:BackupRoot = Join-Path $AppRoot 'backups'
+$script:MariaDbBin = 'C:\Program Files\MariaDB 13.0\bin'
+$script:MariaDbRoot = [System.IO.Path]::GetFullPath((Join-Path $AppRoot '..\..\.tools\mariadb'))
+$script:MariaDbIni = Join-Path $MariaDbRoot 'my.ini'
+
+function Get-MariaDbMysqld {
+    $candidate = Join-Path $MariaDbBin 'mysqld.exe'
+    if (Test-Path $candidate) {
+        return $candidate
+    }
+    return $null
+}
+
+function Test-MariaDbListening {
+    param([int]$Port = 3307)
+    return @(Get-ListenerPids -Port $Port).Count -gt 0
+}
+
+function Start-LocalMariaDb {
+    $mysqld = Get-MariaDbMysqld
+    if (-not $mysqld) {
+        return $false
+    }
+    if (-not (Test-Path $MariaDbIni)) {
+        return $false
+    }
+    if (Test-MariaDbListening -Port 3307) {
+        return $true
+    }
+
+    if (-not (Test-Path $StateDir)) {
+        New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+    }
+
+    $proc = Start-Process -FilePath $mysqld -ArgumentList "--defaults-file=$MariaDbIni" -WindowStyle Hidden -PassThru
+    if (-not $proc) {
+        return $false
+    }
+    Set-Content -Path $MariaDbPidFile -Value $proc.Id -Encoding ASCII
+
+    $deadline = (Get-Date).AddSeconds(20)
+    do {
+        if (Test-MariaDbListening -Port 3307) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 400
+    } while ((Get-Date) -lt $deadline)
+
+    return (Test-MariaDbListening -Port 3307)
+}
+
+function Stop-LocalMariaDb {
+    $targets = New-Object System.Collections.Generic.List[int]
+    if (Test-Path $MariaDbPidFile) {
+        $saved = Get-Content $MariaDbPidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($saved -match '^\d+$') {
+            $targets.Add([int]$saved)
+        }
+    }
+
+    foreach ($proc in (Get-Process mysqld -ErrorAction SilentlyContinue)) {
+        $command = Get-ProcessCommandLine -ProcessId $proc.Id
+        if ($command -and $command.ToLower().Contains($MariaDbRoot.ToLower())) {
+            $targets.Add($proc.Id)
+        }
+    }
+
+    foreach ($target in ($targets | Select-Object -Unique)) {
+        $alive = Get-Process -Id $target -ErrorAction SilentlyContinue
+        if ($alive) {
+            & taskkill.exe /PID $target /T /F | Out-Null
+        }
+    }
+
+    if (Test-Path $MariaDbPidFile) {
+        Remove-Item $MariaDbPidFile -Force -ErrorAction SilentlyContinue
+    }
+}
 
 function Get-DotEnvValue {
     param(

@@ -91,7 +91,7 @@ try {
     Write-Info "PHP: $phpVersion"
     Write-Info "Node: $((& node -v).Trim())"
 
-    foreach ($extension in @('pdo_sqlite', 'sqlite3', 'openssl', 'mbstring', 'fileinfo', 'tokenizer')) {
+    foreach ($extension in @('pdo_mysql', 'openssl', 'mbstring', 'fileinfo', 'tokenizer')) {
         $loaded = & $php -m
         if ($loaded -notcontains $extension) {
             Write-Fail "PHP is missing the $extension extension. Enable it in php.ini and run start-local.bat again."
@@ -203,17 +203,14 @@ try {
         }
     }
 
-    $databaseFile = Get-DotEnvValue -Path $envFile -Name 'DB_DATABASE'
-    if (-not $databaseFile) {
-        $databaseFile = Join-Path $LaravelRoot 'database\database.sqlite'
+    Write-Info 'Starting the local SQL database (MariaDB).'
+    if (-not (Start-LocalMariaDb)) {
+        Write-Fail 'Could not start MariaDB on port 3307. Install MariaDB or run start-local.bat again.'
+        Exit-Script 1
     }
-    $databaseDir = Split-Path -Parent $databaseFile
-    if ($databaseDir -and -not (Test-Path $databaseDir)) {
-        New-Item -ItemType Directory -Force -Path $databaseDir | Out-Null
-    }
-    if (-not (Test-Path $databaseFile)) {
-        New-Item -ItemType File -Path $databaseFile | Out-Null
-        Write-Info "Created local database: $databaseFile"
+    $mysql = Join-Path $MariaDbBin 'mysql.exe'
+    if (Test-Path $mysql) {
+        & $mysql --protocol=tcp -h 127.0.0.1 -P 3307 -u root --password=erp123 -e "CREATE DATABASE IF NOT EXISTS rts_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>$null | Out-Null
     }
 
     Write-Info 'Checking the database.'

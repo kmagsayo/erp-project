@@ -73,8 +73,33 @@ export function BillingPage() {
   }, [formKey, listVersion])
 
   useEffect(() => {
-    const state = location.state as { toast?: string; highlightId?: string } | null
-    if (!state?.toast && !state?.highlightId) return
+    const state = location.state as {
+      toast?: string
+      highlightId?: string
+      continueWorkflow?: boolean
+      customerId?: string
+      customerName?: string
+      deliveryReceiptId?: string
+    } | null
+    if (!state?.toast && !state?.highlightId && !state?.continueWorkflow) return
+
+    if (state.continueWorkflow) {
+      if (state.toast) setToast(state.toast)
+      const timer = window.setTimeout(() => {
+        navigate('/soa', {
+          replace: true,
+          state: {
+            toast: state.toast,
+            customerId: state.customerId,
+            customerName: state.customerName,
+            deliveryReceiptId: state.deliveryReceiptId,
+            continueWorkflow: true,
+          },
+        })
+      }, 700)
+      return () => window.clearTimeout(timer)
+    }
+
     if (state.toast) setToast(state.toast)
     if (state.highlightId) setSelectedId(state.highlightId)
     navigate('.', { replace: true, state: null })
