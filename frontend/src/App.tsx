@@ -15,6 +15,7 @@ import { PurchaseOrdersPage } from '@/pages/PurchaseOrders'
 import { QuotationsPage } from '@/pages/Quotations'
 import { ReceivingPage } from '@/pages/Receiving'
 import { ReportsPage } from '@/pages/Reports'
+import { ServiceOrdersPage } from '@/pages/ServiceOrders'
 import { SettingsPage } from '@/pages/Settings'
 import { StatementOfAccountPage } from '@/pages/StatementOfAccount'
 import { CompanySetupPage } from '@/pages/setups/CompanySetupPage'
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="inventory/history" element={<Navigate to="/inventory" replace />} />
             <Route path="delivery-receipts" element={<DeliveryReceiptsPage />} />
             <Route path="delivery-receipt" element={<DeliveryReceiptsPage />} />
+            <Route path="service-orders" element={<ServiceOrdersPage />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="soa" element={<StatementOfAccountPage />} />
             <Route path="statement-of-account" element={<Navigate to="/soa" replace />} />

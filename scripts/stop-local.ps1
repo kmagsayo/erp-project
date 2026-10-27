@@ -2,6 +2,7 @@ $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
 $port = Get-AppPort
+Stop-BillingScheduler
 $stopped = @(Stop-OurServer)
 
 $deadline = (Get-Date).AddSeconds(10)

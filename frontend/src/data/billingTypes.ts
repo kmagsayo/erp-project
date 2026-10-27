@@ -7,6 +7,7 @@ export interface BillingLineItem {
   unit: string
   unitPrice: number
   amount: number
+  accountNumber?: string
 }
 
 export interface Billing {
@@ -29,6 +30,13 @@ export interface Billing {
   retentionAmount: number
   managementAmount: number
   mobilizationAmount: number
+  contractAmount: number
+  monthlyRecurring: number
+  startDate: string
+  endDate: string
+  runScriptDate: string
+  installmentNo?: number
+  installmentCount?: number
   total: number
   amountPaid: number
   balance: number

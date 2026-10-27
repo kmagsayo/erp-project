@@ -6,6 +6,7 @@ $script:LaravelRoot = Join-Path $AppRoot 'backend'
 $script:LogDir = Join-Path $AppRoot 'logs'
 $script:StateDir = Join-Path $AppRoot '.local'
 $script:PidFile = Join-Path $StateDir 'server.pid'
+$script:SchedulerPidFile = Join-Path $StateDir 'scheduler.pid'
 $script:BackupRoot = Join-Path $AppRoot 'backups'
 
 function Get-DotEnvValue {
@@ -153,6 +154,22 @@ function Stop-OurServer {
     }
 
     return $stopped
+}
+
+function Stop-BillingScheduler {
+    if (-not (Test-Path $SchedulerPidFile)) {
+        return
+    }
+
+    $saved = Get-Content $SchedulerPidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($saved -match '^\d+$') {
+        $alive = Get-Process -Id ([int]$saved) -ErrorAction SilentlyContinue
+        if ($alive) {
+            & taskkill.exe /PID $saved /T /F | Out-Null
+        }
+    }
+
+    Remove-Item $SchedulerPidFile -Force -ErrorAction SilentlyContinue
 }
 
 function Find-BrowserExe {

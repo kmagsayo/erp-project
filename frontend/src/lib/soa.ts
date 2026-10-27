@@ -27,11 +27,12 @@ export interface SoaPrintItem {
 export interface SoaPrintDocumentModel {
   customerName: string
   customerAddress: string
-  thru: string
   statementDate: string
   statementNo: string
   reference: string
+  activityCaption: string
   items: SoaPrintItem[]
+  subtotalAmount: number
   totalAmount: number
 }
 
@@ -42,6 +43,29 @@ export const soaStatusLabel: Record<SoaStatus, string> = {
   partial: 'Partial',
   settled: 'Settled',
 }
+
+const ORDINAL_WORDS = [
+  'FIRST',
+  'SECOND',
+  'THIRD',
+  'FOURTH',
+  'FIFTH',
+  'SIXTH',
+  'SEVENTH',
+  'EIGHTH',
+  'NINTH',
+  'TENTH',
+  'ELEVENTH',
+  'TWELFTH',
+  'THIRTEENTH',
+  'FOURTEENTH',
+  'FIFTEENTH',
+  'SIXTEENTH',
+  'SEVENTEENTH',
+  'EIGHTEENTH',
+  'NINETEENTH',
+  'TWENTIETH',
+]
 
 function namesMatch(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase()
@@ -171,10 +195,22 @@ export function formatSoaPrintDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`)
   if (Number.isNaN(date.getTime())) return isoDate
   return date.toLocaleDateString('en-US', {
-    month: 'short',
+    month: 'long',
     day: 'numeric',
     year: 'numeric',
   })
+}
+
+export function formatSoaMonthYear(isoDate: string): string {
+  if (!isoDate) return ''
+  const date = new Date(`${isoDate}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return isoDate.toUpperCase()
+  return date
+    .toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    })
+    .toUpperCase()
 }
 
 export function formatSoaPrintMoney(value: number): string {
@@ -184,13 +220,71 @@ export function formatSoaPrintMoney(value: number): string {
   })
 }
 
-export function buildSoaStatementNo(isoDate: string): string {
-  const date = new Date(`${isoDate}T00:00:00`)
-  if (Number.isNaN(date.getTime())) return isoDate.replaceAll('-', '')
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(3, '0')
-  return `${year}${month}${day}`
+export function billingOrdinalLabel(installmentNo: number): string {
+  if (installmentNo < 1) return ''
+  if (installmentNo <= ORDINAL_WORDS.length) {
+    return `${ORDINAL_WORDS[installmentNo - 1]} BILLING`
+  }
+  const remainder = installmentNo % 100
+  const suffix =
+    remainder >= 11 && remainder <= 13
+      ? 'TH'
+      : remainder % 10 === 1
+        ? 'ST'
+        : remainder % 10 === 2
+          ? 'ND'
+          : remainder % 10 === 3
+            ? 'RD'
+            : 'TH'
+  return `${installmentNo}${suffix} BILLING`
+}
+
+export function buildSoaActivityCaption(billing: Billing): string {
+  const monthYear = formatSoaMonthYear(billing.date)
+  const installmentNo = billing.installmentNo ?? 0
+  const installmentCount = billing.installmentCount ?? 0
+
+  if (monthYear && installmentNo > 0 && installmentCount > 0) {
+    return `Account Activity - FOR THE MONTH OF ${monthYear} (${installmentNo} of ${installmentCount}) - ${billingOrdinalLabel(installmentNo)}`
+  }
+  if (monthYear && installmentNo > 0) {
+    return `Account Activity - FOR THE MONTH OF ${monthYear} - ${billingOrdinalLabel(installmentNo)}`
+  }
+  if (monthYear) {
+    return `Account Activity - FOR THE MONTH OF ${monthYear}`
+  }
+  return 'Account Activity'
+}
+
+function printItemsFromBilling(billing: Billing): SoaPrintItem[] {
+  if (billing.items.length > 0) {
+    return billing.items.map((item, index) => {
+      const quantity = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1
+      const unitPrice = Number.isFinite(item.unitPrice) ? item.unitPrice : item.amount
+      const total = Number.isFinite(item.amount) ? item.amount : quantity * unitPrice
+      return {
+        id: item.id,
+        itemNo: index + 1,
+        quantity,
+        unit: item.unit?.trim() || 'LOT',
+        description: item.description,
+        unitPrice,
+        total,
+      }
+    })
+  }
+
+  return [
+    {
+      id: billing.id,
+      itemNo: 1,
+      quantity: 1,
+      unit: 'LOT',
+      description: billing.projectName || `Billing — ${billing.billingNo}`,
+      unitPrice: billing.total,
+      total: billing.total,
+    },
+  ]
 }
 
 export function buildSoaPrintDocument(
@@ -209,53 +303,32 @@ export function buildSoaPrintDocument(
     })
     .sort((a, b) => a.date.localeCompare(b.date))
 
+  const primary = customerBillings[0]
   const items: SoaPrintItem[] = []
   customerBillings.forEach((billing) => {
-    if (billing.items.length > 0) {
-      billing.items.forEach((item) => {
-        items.push({
-          id: item.id,
-          itemNo: items.length + 1,
-          quantity: item.quantity,
-          unit: item.unit || 'LOT',
-          description: item.description,
-          unitPrice: item.unitPrice,
-          total: item.amount,
-        })
+    printItemsFromBilling(billing).forEach((item) => {
+      items.push({
+        ...item,
+        itemNo: items.length + 1,
       })
-      return
-    }
-    items.push({
-      id: billing.id,
-      itemNo: items.length + 1,
-      quantity: 1,
-      unit: 'LOT',
-      description: `Billing — ${billing.billingNo}${
-        billing.deliveryReceiptNo ? ` / ${billing.deliveryReceiptNo}` : ''
-      }`,
-      unitPrice: billing.total,
-      total: billing.total,
     })
   })
 
-  const statementDate = dateTo || todayIsoDate()
-  const references = [
-    ...new Set(
-      customerBillings
-        .map((row) => row.deliveryReceiptNo || row.billingNo)
-        .filter((value) => Boolean(value)),
-    ),
-  ]
+  const statementDate = primary?.date || dateTo || todayIsoDate()
+  const statementNo = primary?.invoiceNo || primary?.billingNo || statementDate.replaceAll('-', '')
+  const reference = primary?.projectName || ''
+  const totalAmount = items.reduce((sum, item) => sum + item.total, 0)
 
   return {
-    customerName: customer.name || customerBillings[0]?.customerName || '—',
+    customerName: customer.name || primary?.customerName || '—',
     customerAddress: customer.address ?? '',
-    thru: customer.contactPerson ?? '',
     statementDate,
-    statementNo: buildSoaStatementNo(statementDate),
-    reference: references.join(', '),
+    statementNo,
+    reference,
+    activityCaption: primary ? buildSoaActivityCaption(primary) : 'Account Activity',
     items,
-    totalAmount: items.reduce((sum, item) => sum + item.total, 0),
+    subtotalAmount: totalAmount,
+    totalAmount,
   }
 }
 

@@ -334,6 +334,29 @@ try {
     Write-Info 'The server keeps running after you close the browser.'
     Write-Info 'Stop it with stop-local.bat.'
 
+    $schedulerAlive = $false
+    if (Test-Path $SchedulerPidFile) {
+        $savedScheduler = Get-Content $SchedulerPidFile -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($savedScheduler -match '^\d+$') {
+            $schedulerAlive = $null -ne (Get-Process -Id ([int]$savedScheduler) -ErrorAction SilentlyContinue)
+        }
+    }
+    if (-not $schedulerAlive) {
+        $schedulerOut = Join-Path $LogDir 'scheduler.out.log'
+        $schedulerErr = Join-Path $LogDir 'scheduler.err.log'
+        $artisan = Join-Path $LaravelRoot 'artisan'
+        $scheduler = Start-Process `
+            -FilePath $php `
+            -ArgumentList @($artisan, 'schedule:work') `
+            -WorkingDirectory $LaravelRoot `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $schedulerOut `
+            -RedirectStandardError $schedulerErr `
+            -PassThru
+        Set-Content -Path $SchedulerPidFile -Value $scheduler.Id -Encoding ASCII
+        Write-Info 'Scheduled billing check is running.'
+    }
+
     if ($NoBrowser -or $Browser -eq 'none') {
         Exit-Script 0
     }

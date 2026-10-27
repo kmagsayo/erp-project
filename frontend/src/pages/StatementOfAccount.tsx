@@ -7,13 +7,15 @@ import type { Billing } from '@/data/billingTypes'
 import type { SoaLine } from '@/data/soaTypes'
 import { useSetupCustomers } from '@/hooks/useSetupCustomers'
 import { initialBillings, loadBillings } from '@/lib/billings'
+import { listActiveBillings } from '@/lib/billingsApi'
 import { buildSoaFromBillings, buildSoaPrintDocument, formatSoaPrintMoney } from '@/lib/soa'
 import { useEffect, useMemo, useState } from 'react'
 import { flushSync } from 'react-dom'
 
 export function StatementOfAccountPage() {
   const customers = useSetupCustomers()
-  const [billings, setBillings] = useState<Billing[]>(() => loadBillings(initialBillings))
+  const [localBillings, setLocalBillings] = useState<Billing[]>(() => loadBillings(initialBillings))
+  const [activeBillings, setActiveBillings] = useState<Billing[]>([])
   const [customerId, setCustomerId] = useState('')
   const [draftFrom, setDraftFrom] = useState('')
   const [draftTo, setDraftTo] = useState('')
@@ -29,11 +31,30 @@ export function StatementOfAccountPage() {
 
   useEffect(() => {
     function refresh() {
-      setBillings(loadBillings(initialBillings))
+      setLocalBillings(loadBillings(initialBillings))
     }
     window.addEventListener('erp-billings-updated', refresh)
     return () => window.removeEventListener('erp-billings-updated', refresh)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void listActiveBillings()
+      .then((rows) => {
+        if (!cancelled) setActiveBillings(rows)
+      })
+      .catch(() => {
+        if (!cancelled) setActiveBillings([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const billings = useMemo(() => {
+    const localIds = new Set(localBillings.map((row) => row.id))
+    return [...localBillings, ...activeBillings.filter((row) => !localIds.has(row.id))]
+  }, [activeBillings, localBillings])
 
   const customerOptions = useMemo(() => {
     const options = new Map<string, { id: string; name: string }>()

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\BillingScheduleController;
 use App\Http\Controllers\Api\DeliveryReceiptTokenController;
 use App\Http\Controllers\Api\ReceivingScanController;
 use App\Http\Controllers\Api\SettingController;
@@ -59,6 +60,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/user', [AuthController::class, 'user']);
     Route::post('/logout', [AuthController::class, 'logout']);
+    Route::get('/billings', [BillingScheduleController::class, 'index']);
+    Route::post('/billings/schedules', [BillingScheduleController::class, 'store']);
+    Route::delete('/billings/schedules/{schedule}', [BillingScheduleController::class, 'destroySchedule']);
+    Route::delete('/billings/{billing}', [BillingScheduleController::class, 'destroy']);
     Route::put('/settings', [SettingController::class, 'update']);
     Route::put('/settings/password', [SettingController::class, 'updatePassword']);
 

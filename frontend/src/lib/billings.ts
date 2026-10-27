@@ -60,6 +60,19 @@ function normalizeBilling(row: Partial<Billing>): Billing {
     retentionAmount: money(row.retentionAmount),
     managementAmount: money(row.managementAmount),
     mobilizationAmount: money(row.mobilizationAmount),
+    contractAmount: money(row.contractAmount),
+    monthlyRecurring: money(row.monthlyRecurring),
+    startDate: row.startDate ?? '',
+    endDate: row.endDate ?? '',
+    runScriptDate: row.runScriptDate ?? '',
+    installmentNo:
+      typeof row.installmentNo === 'number' && row.installmentNo > 0
+        ? row.installmentNo
+        : undefined,
+    installmentCount:
+      typeof row.installmentCount === 'number' && row.installmentCount > 0
+        ? row.installmentCount
+        : undefined,
     total,
     amountPaid,
     balance,
@@ -265,6 +278,11 @@ export function createBillingFromDeliveryReceipt(
       retentionAmount: 0,
       managementAmount: 0,
       mobilizationAmount: 0,
+      contractAmount: 0,
+      monthlyRecurring: 0,
+      startDate: '',
+      endDate: '',
+      runScriptDate: '',
       total: 0,
       amountPaid: 0,
       balance: 0,
@@ -289,8 +307,14 @@ export interface ManualBillingInput {
   retentionAmount: number
   managementAmount: number
   mobilizationAmount: number
+  contractAmount: number
+  monthlyRecurring: number
+  startDate: string
+  endDate: string
+  runScriptDate: string
   netAmount: number
   remarks: string
+  items?: BillingLineItem[]
 }
 
 export function buildManualBilling(
@@ -304,6 +328,12 @@ export function buildManualBilling(
   if (!input.date) {
     return { error: 'Enter the transaction date.' }
   }
+  if (!input.projectId || !input.projectName.trim()) {
+    return { error: 'Select a project.' }
+  }
+  if (input.startDate && input.endDate && input.endDate < input.startDate) {
+    return { error: 'End date cannot be before the start date.' }
+  }
   if (!invoiceNo) {
     return { error: 'Enter the invoice number.' }
   }
@@ -312,6 +342,8 @@ export function buildManualBilling(
     input.retentionAmount,
     input.managementAmount,
     input.mobilizationAmount,
+    input.contractAmount,
+    input.monthlyRecurring,
     input.netAmount,
   ]
   if (amounts.some((amount) => !Number.isFinite(amount) || amount < 0)) {
@@ -330,6 +362,20 @@ export function buildManualBilling(
   }
 
   const netAmount = input.netAmount
+  const accountLines = (input.items ?? []).filter((item) => item.description.trim())
+  const items =
+    accountLines.length > 0
+      ? accountLines
+      : [
+          {
+            id: crypto.randomUUID(),
+            description: input.projectName.trim() || input.customerName.trim(),
+            quantity: 1,
+            unit: 'lot',
+            unitPrice: netAmount,
+            amount: netAmount,
+          },
+        ]
   return {
     billing: normalizeBilling({
       id: crypto.randomUUID(),
@@ -344,22 +390,18 @@ export function buildManualBilling(
       date: input.date,
       dueDate: addDaysIso(input.date, 30),
       status: 'unpaid',
-      items: [
-        {
-          id: crypto.randomUUID(),
-          description: input.projectName.trim() || input.customerName.trim(),
-          quantity: 1,
-          unit: 'lot',
-          unitPrice: netAmount,
-          amount: netAmount,
-        },
-      ],
+      items,
       subtotal: netAmount,
       tax: 0,
       withholdingTax: input.withholdingTax,
       retentionAmount: input.retentionAmount,
       managementAmount: input.managementAmount,
       mobilizationAmount: input.mobilizationAmount,
+      contractAmount: input.contractAmount,
+      monthlyRecurring: input.monthlyRecurring,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      runScriptDate: input.runScriptDate.trim(),
       total: netAmount,
       amountPaid: 0,
       balance: netAmount,

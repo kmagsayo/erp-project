@@ -3,7 +3,7 @@ import { companyInfo } from '@/data/accomplishmentReports'
 import type { SoaPrintDocumentModel } from '@/lib/soa'
 import { formatSoaPrintDate, formatSoaPrintMoney } from '@/lib/soa'
 
-const EMPTY_ROWS = 10
+const EMPTY_ROWS = 8
 
 export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
   const emptyRows = Math.max(0, EMPTY_ROWS - document.items.length)
@@ -18,6 +18,7 @@ export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
             <div key={line}>{line}</div>
           ))}
           <div>Tel no: {companyInfo.phone}</div>
+          <div>VAT REG. TIN.: {companyInfo.vatTin}</div>
         </div>
       </div>
 
@@ -30,9 +31,6 @@ export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
           {document.customerAddress ? (
             <div className="soa-customer-address">{document.customerAddress}</div>
           ) : null}
-          <div className="soa-thru">
-            Thru: {document.thru || ''}
-          </div>
         </div>
         <div className="soa-right-meta">
           <div className="soa-meta-line">
@@ -50,6 +48,8 @@ export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
         <span className="soa-reference-label">Reference</span>
         <span className="soa-reference-value">{document.reference}</span>
       </div>
+
+      <div className="soa-activity-caption">{document.activityCaption}</div>
 
       <table className="soa-items-table">
         <colgroup>
@@ -96,9 +96,16 @@ export function SoaDocument({ document }: { document: SoaPrintDocumentModel }) {
               ****NOTHING FOLLOWS****
             </td>
           </tr>
-          <tr className="soa-total-row">
+          <tr className="soa-subtotal-row">
             <td colSpan={4} className="soa-total-label">
-              TOTAL AMOUNT
+              SUB-TOTAL AMOUNT
+            </td>
+            <td className="soa-c">PHP</td>
+            <td className="soa-r">{formatSoaPrintMoney(document.subtotalAmount)}</td>
+          </tr>
+          <tr className="soa-grand-row">
+            <td colSpan={4} className="soa-total-label">
+              GRAND TOTAL AMOUNT
             </td>
             <td className="soa-c">PHP</td>
             <td className="soa-r soa-total-value">{formatSoaPrintMoney(document.totalAmount)}</td>

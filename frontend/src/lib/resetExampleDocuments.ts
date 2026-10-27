@@ -9,6 +9,7 @@ const DOCUMENT_KEYS = [
   'erp-gate-passes',
   'erp-billings',
   'erp-billings-v2',
+  'erp-service-orders',
   'erp-accomplishments',
   'erp-notification-read',
   'erp-inventory-movements',

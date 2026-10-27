@@ -1831,6 +1831,176 @@ html.login-route #root {
   pointer-events: none;
 }
 
+.service-invoice-print-root {
+  display: none;
+  pointer-events: none;
+}
+
+.si-document {
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm 12mm 14mm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.si-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8mm;
+  align-items: flex-start;
+}
+
+.si-company h1 {
+  margin: 0 0 2mm;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.si-company p {
+  margin: 0;
+  font-size: 11px;
+}
+
+.si-title-block {
+  width: 62mm;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.si-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.si-invoice-no,
+.si-date {
+  display: grid;
+  grid-template-columns: 24mm 1fr;
+  align-items: center;
+  margin-top: 3mm;
+  text-align: left;
+}
+
+.si-invoice-no strong,
+.si-date strong {
+  display: block;
+  min-height: 7mm;
+  border: 1px solid #000;
+  padding: 1mm 2mm;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+}
+
+.si-sale-type {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5mm;
+  margin: 6mm 0 4mm;
+  font-size: 11px;
+}
+
+.si-sale-type span::before {
+  content: '';
+  display: inline-block;
+  width: 3.5mm;
+  height: 3.5mm;
+  margin-right: 2mm;
+  border: 1px solid #000;
+  vertical-align: -0.5mm;
+}
+
+.si-sale-type .si-checked::before {
+  background:
+    linear-gradient(to bottom right, transparent 45%, #000 46% 54%, transparent 55%),
+    linear-gradient(to bottom left, transparent 45%, #000 46% 54%, transparent 55%);
+}
+
+.si-sold-to {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+  padding: 2mm 0 3mm;
+}
+
+.si-sold-to h2 {
+  margin: 0 0 2mm;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.si-sold-to p {
+  margin: 0.6mm 0;
+}
+
+.si-sold-to span {
+  display: inline-block;
+  min-width: 38mm;
+}
+
+.si-items {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.si-items th,
+.si-items td {
+  border: 1px solid #000;
+  padding: 1.5mm 2mm;
+  vertical-align: top;
+  font-weight: 400;
+}
+
+.si-items th {
+  text-align: center;
+  font-size: 11px;
+}
+
+.si-items th:first-child,
+.si-description {
+  width: 55%;
+  text-align: left;
+}
+
+.si-number {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.si-items tbody tr {
+  height: 8mm;
+}
+
+.si-total {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.si-total span,
+.si-total strong {
+  border: 1px solid #000;
+  border-top: 0;
+  padding: 2mm 3mm;
+}
+
+.si-total span {
+  min-width: 48mm;
+  text-align: center;
+  font-size: 11px;
+}
+
+.si-total strong {
+  min-width: 36mm;
+  text-align: right;
+}
+
 .item-barcode-print-root {
   display: none;
   pointer-events: none;
@@ -2042,6 +2212,18 @@ html.login-route #root {
   min-height: 14px;
 }
 
+.soa-activity-caption {
+  margin: 0;
+  padding: 2.5mm 3px;
+  border: 1px solid #000;
+  border-bottom: none;
+  background: #efefef;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 10.5px;
+}
+
 .soa-items-table {
   width: 100%;
   border-collapse: collapse;
@@ -2071,6 +2253,12 @@ html.login-route #root {
 .soa-col-price { width: 15%; }
 .soa-col-total { width: 15%; }
 
+.soa-col-no { width: 7%; }
+.soa-col-account { width: 38%; }
+.soa-col-acctno { width: 23%; }
+.soa-col-fee { width: 16%; }
+.soa-col-line-total { width: 16%; }
+
 .soa-c { text-align: center; }
 .soa-l { text-align: left; }
 .soa-r { text-align: right; white-space: nowrap; }
@@ -2085,9 +2273,20 @@ html.login-route #root {
   font-weight: 700;
 }
 
-.soa-total-row td {
+.soa-account-table .soa-nothing {
+  text-align: left !important;
+  padding-left: 3mm !important;
+}
+
+.soa-total-row td,
+.soa-subtotal-row td,
+.soa-grand-row td {
   background: #efefef;
   font-weight: 700;
+}
+
+.soa-grand-row td {
+  background: #fff;
 }
 
 .soa-total-label {
@@ -2103,7 +2302,7 @@ html.login-route #root {
   display: flex;
   justify-content: space-between;
   gap: 16mm;
-  margin-top: 12mm;
+  margin-top: 8mm;
   padding: 0 4mm;
 }
 
@@ -2112,16 +2311,16 @@ html.login-route #root {
 }
 
 .soa-signature-label {
-  margin-bottom: 2mm;
+  margin-bottom: 1mm;
 }
 
 .soa-signature-space {
-  height: 14mm;
+  height: 6mm;
 }
 
 .soa-signature-line {
   border-bottom: 1px solid #000;
-  margin: 14mm 0 2mm;
+  margin: 6mm 0 2mm;
 }
 
 .soa-signature-name {
@@ -2379,6 +2578,8 @@ html.login-route #root {
   .gatepass-print-root *,
   .soa-print-root,
   .soa-print-root *,
+  .service-invoice-print-root,
+  .service-invoice-print-root *,
   .item-barcode-print-root,
   .item-barcode-print-root * {
     visibility: visible;
@@ -2392,6 +2593,7 @@ html.login-route #root {
   .receiving-print-root,
   .gatepass-print-root,
   .soa-print-root,
+  .service-invoice-print-root,
   .item-barcode-print-root {
     display: block;
     position: absolute;
