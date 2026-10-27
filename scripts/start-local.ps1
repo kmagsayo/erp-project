@@ -203,14 +203,14 @@ try {
         }
     }
 
-    Write-Info 'Starting the local SQL database (MariaDB).'
-    if (-not (Start-LocalMariaDb)) {
-        Write-Fail 'Could not start MariaDB on port 3307. Install MariaDB or run start-local.bat again.'
+    Write-Info 'Starting WampServer MySQL.'
+    if (-not (Start-WampMysql)) {
+        Write-Fail 'Could not start WampServer MySQL on port 3306. Open WampServer and start MySQL, then run start-local.bat again.'
         Exit-Script 1
     }
-    $mysql = Join-Path $MariaDbBin 'mysql.exe'
-    if (Test-Path $mysql) {
-        & $mysql --protocol=tcp -h 127.0.0.1 -P 3307 -u root --password=erp123 -e "CREATE DATABASE IF NOT EXISTS rts_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>$null | Out-Null
+    $mysql = Get-WampMysqlExe
+    if ($mysql) {
+        & $mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root -e "CREATE DATABASE IF NOT EXISTS rts_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;" 2>$null | Out-Null
     }
 
     Write-Info 'Checking the database.'
@@ -246,90 +246,49 @@ try {
 
     $baseUrl = Get-AppUrl -Port $port
     $healthUrl = "$baseUrl/api/health"
-    $listeners = @(Get-ListenerPids -Port $port)
-    if ($listeners.Count -gt 0) {
-        try {
-            $existing = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 5
-            if ($existing.StatusCode -eq 200 -and $existing.Content -match '"database"\s*:\s*"ok"') {
-                Write-Info "The application is already running at $baseUrl"
-            } else {
-                Write-Fail "Port $port is already in use, and it is not a healthy ERP server."
-                Write-Fail "Listening process id: $($listeners -join ', ')"
-                Write-Fail 'Stop that program or change APP_PORT in backend\.env, then run start-local.bat again.'
-                Exit-Script 1
-            }
-        } catch {
-            Write-Fail "Port $port is already in use by process id $($listeners -join ', ')."
-            Write-Fail 'Stop that program or change APP_PORT in backend\.env, then run start-local.bat again.'
-            Exit-Script 1
-        }
-    } else {
-        $outLog = Join-Path $LogDir 'server.out.log'
-        $errLog = Join-Path $LogDir 'server.err.log'
-        if (Test-Path $outLog) { Remove-Item $outLog -Force -ErrorAction SilentlyContinue }
-        if (Test-Path $errLog) { Remove-Item $errLog -Force -ErrorAction SilentlyContinue }
 
-        Write-Info "Starting the server on 0.0.0.0:$port"
-        $artisan = Join-Path $LaravelRoot 'artisan'
-        $process = Start-Process `
-            -FilePath $php `
-            -ArgumentList @($artisan, 'serve', '--host=0.0.0.0', "--port=$port", '--no-reload') `
-            -WorkingDirectory $LaravelRoot `
-            -WindowStyle Hidden `
-            -RedirectStandardOutput $outLog `
-            -RedirectStandardError $errLog `
-            -PassThru
-        Set-Content -Path $PidFile -Value $process.Id -Encoding ASCII
-
-        $healthy = $false
-        $loginOk = $false
-        for ($attempt = 0; $attempt -lt 40; $attempt++) {
-            if ($process.HasExited) {
-                break
-            }
-            try {
-                $health = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
-                if ($health.StatusCode -eq 200 -and $health.Content -match '"database"\s*:\s*"ok"') {
-                    $healthy = $true
-                    $login = Invoke-WebRequest -Uri "$baseUrl/login" -UseBasicParsing -TimeoutSec 5
-                    $loginOk = $login.StatusCode -eq 200 -and $login.Content -match 'id="root"'
-                    if ($loginOk) {
-                        break
-                    }
-                }
-            } catch {
-            }
-            Start-Sleep -Milliseconds 500
-        }
-
-        if (-not $healthy -or -not $loginOk) {
-            Write-Fail 'The server did not become ready.'
-            if ($process.HasExited) {
-                Write-Fail "The server process exited with code $($process.ExitCode)."
-            }
-            Write-Fail "Review $outLog and $errLog"
-            if (Test-Path $errLog) {
-                Write-Host '--- server.err.log ---'
-                Get-Content $errLog -Tail 40 | ForEach-Object { Write-Host $_ }
-            }
-            if (Test-Path $outLog) {
-                Write-Host '--- server.out.log ---'
-                Get-Content $outLog -Tail 40 | ForEach-Object { Write-Host $_ }
-            }
-            Exit-Script 1
-        }
+    # Free port 8080 from php artisan serve before Apache binds it.
+    $stoppedArtisan = @(Stop-OurServer)
+    if ($stoppedArtisan.Count -gt 0) {
+        Write-Info "Stopped the old PHP built-in server (process $($stoppedArtisan -join ', '))."
     }
 
-    $bound = netstat -ano -p tcp | Select-String -Pattern "(127\.0\.0\.1|0\.0\.0\.0):$port\s+\S+\s+LISTENING"
-    if (-not $bound) {
-        Write-Fail "The server is not listening on port $port."
+    Write-Info 'Starting WampServer Apache for the ERP.'
+    if (-not (Start-WampApache)) {
+        Write-Fail 'Could not start WampServer Apache on port 8080.'
+        Write-Fail 'Open WampServer, start Apache, then run start-local.bat again.'
+        Write-Fail 'Also check C:\wamp64\bin\apache\apache2.4.65\logs\error.log'
+        Exit-Script 1
+    }
+
+    $healthy = $false
+    $loginOk = $false
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+        try {
+            $health = Invoke-WebRequest -Uri $healthUrl -UseBasicParsing -TimeoutSec 2
+            if ($health.StatusCode -eq 200 -and $health.Content -match '"database"\s*:\s*"ok"') {
+                $healthy = $true
+                $login = Invoke-WebRequest -Uri "$baseUrl/login" -UseBasicParsing -TimeoutSec 5
+                $loginOk = $login.StatusCode -eq 200 -and $login.Content -match 'id="root"'
+                if ($loginOk) {
+                    break
+                }
+            }
+        } catch {
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    if (-not $healthy -or -not $loginOk) {
+        Write-Fail 'Apache started, but the ERP did not become ready on port 8080.'
+        Write-Fail 'Check C:\wamp64\bin\apache\apache2.4.65\logs\error.log'
         Exit-Script 1
     }
 
     Write-Info ''
     Write-Info "Ready: $baseUrl/login"
-    Write-Info 'The server keeps running after you close the browser.'
-    Write-Info 'Stop it with stop-local.bat.'
+    Write-Info 'The ERP is running on WampServer Apache + MySQL.'
+    Write-Info 'Stop the billing scheduler with stop-local.bat. Stop Apache/MySQL from WampServer if needed.'
 
     $schedulerAlive = $false
     if (Test-Path $SchedulerPidFile) {

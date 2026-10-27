@@ -26,7 +26,7 @@ $databaseBackup = Join-Path $source 'rts_system.sql'
 if (-not (Test-Path $databaseBackup)) {
     $legacySqlite = Join-Path $source 'database.sqlite'
     if (Test-Path $legacySqlite) {
-        Write-Host "That backup is an old SQLite backup. This app now uses MariaDB (rts_system)." -ForegroundColor Red
+        Write-Host "That backup is an old SQLite backup. This app now uses WampServer MySQL (rts_system)." -ForegroundColor Red
     } else {
         Write-Host "That backup does not contain rts_system.sql: $source" -ForegroundColor Red
     }
@@ -55,7 +55,7 @@ if (-not $dbHost) {
 }
 $dbPort = Get-DotEnvValue -Path $envFile -Name 'DB_PORT'
 if (-not $dbPort) {
-    $dbPort = '3307'
+    $dbPort = '3306'
 }
 $dbUser = Get-DotEnvValue -Path $envFile -Name 'DB_USERNAME'
 if (-not $dbUser) {
@@ -66,18 +66,22 @@ if ($null -eq $dbPassword) {
     $dbPassword = ''
 }
 
-$mysql = Join-Path $MariaDbBin 'mysql.exe'
-if (-not (Test-Path $mysql)) {
-    Write-Host "mysql was not found at $mysql" -ForegroundColor Red
+$mysql = Get-WampMysqlExe
+if (-not $mysql) {
+    Write-Host 'mysql was not found in WampServer.' -ForegroundColor Red
     exit 1
 }
 
-if (-not (Start-LocalMariaDb)) {
-    Write-Host 'Could not start MariaDB for the restore.' -ForegroundColor Red
+if (-not (Start-WampMysql)) {
+    Write-Host 'Could not start WampServer MySQL for the restore.' -ForegroundColor Red
     exit 1
 }
 
-Get-Content -Path $databaseBackup -Raw | & $mysql --protocol=tcp -h $dbHost -P $dbPort -u $dbUser --password=$dbPassword
+if ($dbPassword -ne '') {
+    Get-Content -Path $databaseBackup -Raw | & $mysql --protocol=tcp -h $dbHost -P $dbPort -u $dbUser --password=$dbPassword
+} else {
+    Get-Content -Path $databaseBackup -Raw | & $mysql --protocol=tcp -h $dbHost -P $dbPort -u $dbUser
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host 'Database restore failed.' -ForegroundColor Red
     exit 1

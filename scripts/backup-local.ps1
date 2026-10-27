@@ -12,7 +12,7 @@ if (-not $dbHost) {
 }
 $dbPort = Get-DotEnvValue -Path $envFile -Name 'DB_PORT'
 if (-not $dbPort) {
-    $dbPort = '3307'
+    $dbPort = '3306'
 }
 $dbUser = Get-DotEnvValue -Path $envFile -Name 'DB_USERNAME'
 if (-not $dbUser) {
@@ -23,14 +23,14 @@ if ($null -eq $dbPassword) {
     $dbPassword = ''
 }
 
-$mysqldump = Join-Path $MariaDbBin 'mysqldump.exe'
-if (-not (Test-Path $mysqldump)) {
-    Write-Host "mysqldump was not found at $mysqldump" -ForegroundColor Red
+$mysqldump = Get-WampMysqldumpExe
+if (-not $mysqldump) {
+    Write-Host 'mysqldump was not found in WampServer MySQL.' -ForegroundColor Red
     exit 1
 }
 
-if (-not (Start-LocalMariaDb)) {
-    Write-Host 'Could not start MariaDB for the backup.' -ForegroundColor Red
+if (-not (Start-WampMysql)) {
+    Write-Host 'Could not start WampServer MySQL for the backup.' -ForegroundColor Red
     exit 1
 }
 
@@ -39,7 +39,11 @@ $dest = Join-Path $BackupRoot $stamp
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 $dumpFile = Join-Path $dest 'rts_system.sql'
-& $mysqldump --protocol=tcp -h $dbHost -P $dbPort -u $dbUser --password=$dbPassword --databases $dbName --result-file=$dumpFile
+if ($dbPassword -ne '') {
+    & $mysqldump --protocol=tcp -h $dbHost -P $dbPort -u $dbUser --password=$dbPassword --databases $dbName --result-file=$dumpFile
+} else {
+    & $mysqldump --protocol=tcp -h $dbHost -P $dbPort -u $dbUser --databases $dbName --result-file=$dumpFile
+}
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $dumpFile)) {
     Write-Host 'Database dump failed.' -ForegroundColor Red
     exit 1

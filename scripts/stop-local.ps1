@@ -4,7 +4,6 @@ $ErrorActionPreference = 'Continue'
 $port = Get-AppPort
 Stop-BillingScheduler
 $stopped = @(Stop-OurServer)
-Stop-LocalMariaDb
 
 $deadline = (Get-Date).AddSeconds(10)
 do {

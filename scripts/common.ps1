@@ -7,84 +7,100 @@ $script:LogDir = Join-Path $AppRoot 'logs'
 $script:StateDir = Join-Path $AppRoot '.local'
 $script:PidFile = Join-Path $StateDir 'server.pid'
 $script:SchedulerPidFile = Join-Path $StateDir 'scheduler.pid'
-$script:MariaDbPidFile = Join-Path $StateDir 'mariadb.pid'
 $script:BackupRoot = Join-Path $AppRoot 'backups'
-$script:MariaDbBin = 'C:\Program Files\MariaDB 13.0\bin'
-$script:MariaDbRoot = [System.IO.Path]::GetFullPath((Join-Path $AppRoot '..\..\.tools\mariadb'))
-$script:MariaDbIni = Join-Path $MariaDbRoot 'my.ini'
+$script:WampRoot = 'C:\wamp64'
+$script:WampMysqlBin = Join-Path $WampRoot 'bin\mysql\mysql8.4.7\bin'
+$script:WampMysqlIni = Join-Path $WampRoot 'bin\mysql\mysql8.4.7\my.ini'
+$script:WampHttpd = Join-Path $WampRoot 'bin\apache\apache2.4.65\bin\httpd.exe'
 
-function Get-MariaDbMysqld {
-    $candidate = Join-Path $MariaDbBin 'mysqld.exe'
+function Get-WampMysqlExe {
+    $candidate = Join-Path $WampMysqlBin 'mysql.exe'
     if (Test-Path $candidate) {
         return $candidate
     }
     return $null
 }
 
-function Test-MariaDbListening {
-    param([int]$Port = 3307)
+function Get-WampMysqldumpExe {
+    $candidate = Join-Path $WampMysqlBin 'mysqldump.exe'
+    if (Test-Path $candidate) {
+        return $candidate
+    }
+    return $null
+}
+
+function Test-MysqlListening {
+    param([int]$Port = 3306)
     return @(Get-ListenerPids -Port $Port).Count -gt 0
 }
 
-function Start-LocalMariaDb {
-    $mysqld = Get-MariaDbMysqld
-    if (-not $mysqld) {
-        return $false
-    }
-    if (-not (Test-Path $MariaDbIni)) {
-        return $false
-    }
-    if (Test-MariaDbListening -Port 3307) {
-        return $true
-    }
-
-    if (-not (Test-Path $StateDir)) {
-        New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
-    }
-
-    $proc = Start-Process -FilePath $mysqld -ArgumentList "--defaults-file=$MariaDbIni" -WindowStyle Hidden -PassThru
-    if (-not $proc) {
-        return $false
-    }
-    Set-Content -Path $MariaDbPidFile -Value $proc.Id -Encoding ASCII
-
-    $deadline = (Get-Date).AddSeconds(20)
-    do {
-        if (Test-MariaDbListening -Port 3307) {
-            return $true
+function Stop-OtherDatabaseServers {
+    foreach ($proc in (Get-Process mysqld,httpd -ErrorAction SilentlyContinue)) {
+        $command = (Get-ProcessCommandLine -ProcessId $proc.Id).ToLower()
+        if ($command.Contains('wamp64')) {
+            continue
         }
-        Start-Sleep -Milliseconds 400
-    } while ((Get-Date) -lt $deadline)
-
-    return (Test-MariaDbListening -Port 3307)
+        & taskkill.exe /PID $proc.Id /F | Out-Null
+    }
+    Start-Sleep -Seconds 2
 }
 
-function Stop-LocalMariaDb {
-    $targets = New-Object System.Collections.Generic.List[int]
-    if (Test-Path $MariaDbPidFile) {
-        $saved = Get-Content $MariaDbPidFile -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($saved -match '^\d+$') {
-            $targets.Add([int]$saved)
+function Start-WampMysql {
+    Stop-OtherDatabaseServers
+    if (Test-MysqlListening -Port 3306) {
+        $mysql = Get-WampMysqlExe
+        if ($mysql) {
+            & $mysql --protocol=tcp -h 127.0.0.1 -P 3306 -u root -e "SELECT 1" 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                return $true
+            }
         }
     }
 
-    foreach ($proc in (Get-Process mysqld -ErrorAction SilentlyContinue)) {
-        $command = Get-ProcessCommandLine -ProcessId $proc.Id
-        if ($command -and $command.ToLower().Contains($MariaDbRoot.ToLower())) {
-            $targets.Add($proc.Id)
-        }
+    $mysqld = Join-Path $WampMysqlBin 'mysqld.exe'
+    if (-not (Test-Path $mysqld) -or -not (Test-Path $WampMysqlIni)) {
+        return $false
     }
 
-    foreach ($target in ($targets | Select-Object -Unique)) {
-        $alive = Get-Process -Id $target -ErrorAction SilentlyContinue
-        if ($alive) {
-            & taskkill.exe /PID $target /T /F | Out-Null
+    Start-Process -FilePath $mysqld -ArgumentList "--defaults-file=$WampMysqlIni" -WindowStyle Hidden
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        if (Test-MysqlListening -Port 3306) {
+            return $true
         }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+
+    return (Test-MysqlListening -Port 3306)
+}
+
+function Start-WampApache {
+    if (-not (Test-Path $WampHttpd)) {
+        return $false
     }
 
-    if (Test-Path $MariaDbPidFile) {
-        Remove-Item $MariaDbPidFile -Force -ErrorAction SilentlyContinue
+    $apacheHome = Split-Path (Split-Path $WampHttpd -Parent) -Parent
+    $configCheck = & $WampHttpd -d $apacheHome -t 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ($configCheck | Out-String)
+        return $false
     }
+
+    Get-Process httpd -ErrorAction SilentlyContinue | ForEach-Object {
+        & taskkill.exe /PID $_.Id /F | Out-Null
+    }
+    Start-Sleep -Seconds 1
+
+    Start-Process -FilePath $WampHttpd -ArgumentList "-d `"$apacheHome`"" -WindowStyle Hidden
+    $deadline = (Get-Date).AddSeconds(30)
+    do {
+        if (@(Get-ListenerPids -Port 8080).Count -gt 0) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 500
+    } while ((Get-Date) -lt $deadline)
+
+    return (@(Get-ListenerPids -Port 8080).Count -gt 0)
 }
 
 function Get-DotEnvValue {
